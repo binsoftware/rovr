@@ -1,0 +1,24 @@
+[package]
+
+name = "rovr"
+version = "0.0.1"
+authors = ["Ryan Stewart <ryan@binsoftware.com>"]
+
+[features]
+default = ["glutin"]
+
+[dependencies]
+bitflags = "*"
+libc = "*"
+
+[dependencies.glutin]
+version = "*"
+optional = true
+
+[dependencies.ovr_sys]
+git = "https://github.com/binsoftware/OculusSDK"
+branch = "cargo"
+
+[dev-dependencies]
+cgmath = "*"
+glium = "*"
