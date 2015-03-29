@@ -2,12 +2,13 @@
 //! interfacing with an HMD and handling rendering.
 
 use std::ptr;
-use std::sync::atomic;
-use std::rc::Rc;
 use std::default::Default;
+use std::marker::PhantomData;
+use std::rc::Rc;
 use std::string::String;
 #[cfg(windows)]
 use std::str;
+use std::sync::atomic;
 use std::vec::{self, Vec};
 
 use libc;
@@ -18,6 +19,7 @@ use glutin;
 use ffi;
 use OculusError;
 use Eye;
+use RenderTarget;
 
 /// Invoke an FFI function with an ovrBool return value, yielding OculusError::SdkError with the
 /// supplied message on failure.
@@ -202,11 +204,14 @@ impl Drop for Hmd {
 /// An active Oculus rendering context associated with an HMD. Only OpenGL is supported. This
 /// provides access to the basic metadata necessary to prepare OpenGL framebuffers for drawing.
 /// 
-/// See `hmd.init_render()` for details on use.
+/// See `hmd.render_to()` for details on use.
 pub struct RenderContext<'a> {
     metadata: RenderMetadata,
 
     owning_hmd: &'a Hmd,
+
+    // hold on to the render target because we need the window handle to stay alive
+    _render_phantom: PhantomData<&'a RenderTarget>
 }
 
 struct GlConfigBuilder {
@@ -226,13 +231,13 @@ impl GlConfigBuilder {
     }
 
     #[cfg(windows)]
-    fn native_window<'a>(&'a mut self, native_window: *mut libc::c_void) -> &'a mut GlConfigBuilder {
+    fn native_window<'a>(&'a mut self, native_window: *const libc::c_void) -> &'a mut GlConfigBuilder {
         self.config.Window = native_window;
         self
     }
 
     #[cfg(not(windows))]
-    fn native_window<'a>(&'a mut self, _: *mut libc::c_void) -> &'a mut GlConfigBuilder {
+    fn native_window<'a>(&'a mut self, _: *const libc::c_void) -> &'a mut GlConfigBuilder {
         self
     }
 
@@ -244,45 +249,41 @@ impl GlConfigBuilder {
 
 pub trait CreateRenderContext<'a> {
     fn new(owning_hmd: &'a Hmd,
-           multisample: i32,
-           native_window: *mut libc::c_void) -> Result<Self, OculusError>;
+           target: &'a RenderTarget) -> Result<Self, OculusError>;
 }
 
 impl<'a> CreateRenderContext<'a> for RenderContext<'a> {
-    /// Create an active Oculus rendering context. **native_window** is only necessary on the
-    /// Windows platform, and is ignored otherwise.
+    /// Create an active Oculus rendering context.
     fn new(owning_hmd: &'a Hmd, 
-           multisample: i32, 
-           native_window: *mut libc::c_void) -> Result<RenderContext<'a>, OculusError> {
+           target: &'a RenderTarget) -> Result<RenderContext<'a>, OculusError> {
         let (w, h) = owning_hmd.resolution();
-        let config = GlConfigBuilder::new(w, h, multisample)
-            .native_window(native_window)
-            .build();
+        let metadata = unsafe {
+            let config = GlConfigBuilder::new(w, h, target.get_multisample() as i32)
+                .native_window(target.get_native_window())
+                .build();
 
-        // TODO: pull in caps as an argument
-        let caps = ffi::ovrDistortionCap_Chromatic |
-            ffi::ovrDistortionCap_TimeWarp |
-            ffi::ovrDistortionCap_Overdrive;
-        let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
-        unsafe {
+            // TODO: pull in caps as an argument
+            let caps = ffi::ovrDistortionCap_Chromatic |
+                ffi::ovrDistortionCap_TimeWarp |
+                ffi::ovrDistortionCap_Overdrive;
+            let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
             ovr_invoke!(ffi::ovrHmd_ConfigureRendering(owning_hmd.native_hmd,
                                                        &config,
                                                        caps,
                                                        &owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
                                                        &mut eye_render_desc));
-        }
-        if owning_hmd.is_direct() {
-            unsafe {
+            if owning_hmd.is_direct() {
                 ovr_invoke!(ffi::ovrHmd_AttachToWindow(owning_hmd.native_hmd, 
-                                                       native_window, 
+                                                       target.get_native_window(), 
                                                        ptr::null(), 
                                                        ptr::null()));
             }
-        }
+            RenderMetadata::new(&owning_hmd, &eye_render_desc[0], &eye_render_desc[1])
+        };
 
-        let metadata = RenderMetadata::new(&owning_hmd, &eye_render_desc[0], &eye_render_desc[1]);
         Ok(RenderContext {
             owning_hmd: owning_hmd,
+            _render_phantom: PhantomData,
             metadata: metadata
         })
     }

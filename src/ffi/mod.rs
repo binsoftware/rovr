@@ -196,13 +196,13 @@ pub struct ovrGLConfig {
     pub Multisample: i32,
 
     #[cfg(windows)]
-    pub Window: *mut libc::c_void,
+    pub Window: *const libc::c_void,
 
     #[cfg(windows)]
-    pub HDC: *mut libc::c_void,
+    pub HDC: *const libc::c_void,
 
     #[cfg(target_os = "linux")]
-    pub Disp: *mut _XDisplay,
+    pub Disp: *const _XDisplay,
 }
 
 impl Default for ovrGLConfig {
@@ -328,7 +328,7 @@ extern "C" {
                                      eyeFovIn: *const [ovrFovPort; 2], 
                                      eyeRenderDescOut: *mut [ovrEyeRenderDesc; 2]) -> ovrBool;
     pub fn ovrHmd_AttachToWindow(hmd: *mut ovrHmdDesc,
-                                 window: *mut libc::c_void,
+                                 window: *const libc::c_void,
                                  destMirrorRect: *const ovrRecti,
                                  sourceRenderTargetRect: *const ovrRecti) -> ovrBool;
     pub fn ovrHmd_GetFovTextureSize(hmd: *mut ovrHmdDesc, eye: i32, fov: ovrFovPort, pixelsPerDisplayPixel: f32) -> ovrSizei;

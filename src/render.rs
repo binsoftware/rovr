@@ -17,12 +17,18 @@
 //! let (w, h) = hmd.resolution();
 //!
 //! // <create a window with an OpenGL context based on resolution>
-//! // <get native window handle>
+//! // <create a render target; see rovr::target for details>
 //!
-//! # let native_window: *mut libc::c_void = std::ptr::null_mut();
+//! # struct EmptyRenderTarget;
+//! # impl rovr::RenderTarget for EmptyRenderTarget {
+//! #     fn get_multisample(&self) -> u32 { 0 }
+//! #     unsafe fn get_native_window(&self) -> *const libc::c_void { std::ptr::null() }
+//! # }
+//! # let render_target = EmptyRenderTarget;
+//!
 //! // This is unsafe because of the lifetime of native_window. If the window is closed before this
 //! // render context is destroyed, bad things may happen!
-//! let rc = unsafe { hmd.init_render(native_window).unwrap() };
+//! let rc = hmd.render_to(&render_target).unwrap();
 //! let (w_left, h_left) = rc.target_texture_size(&Eye::Left);
 //! let (w_right, h_right) = rc.target_texture_size(&Eye::Right);
 //!

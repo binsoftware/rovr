@@ -17,6 +17,8 @@ mod ffi;
 mod shim;
 pub mod render;
 
+pub mod target;
+
 /// Error produced while interacting with a wrapped Oculus device.
 #[derive(Clone, Debug)]
 pub enum OculusError {
@@ -192,6 +194,17 @@ impl HmdBuilder {
     }
 }
 
+/// A target window to bind headset rendering to.
+pub trait RenderTarget {
+    /// Number of samples used for MSAA.
+    fn get_multisample(&self) -> u32;
+
+    /// The native window handle for this window. This can return null for all platforms except
+    /// Windows. The returned handle must be valid with an effective lifetime greater than or equal 
+    /// to the lifetime of self.
+    unsafe fn get_native_window(&self) -> *const libc::c_void;
+}
+
 /// An initialized HMD.
 pub struct Hmd {
     shim_hmd: shim::Hmd
@@ -210,33 +223,11 @@ impl Hmd {
         Ok(Hmd{ shim_hmd: shim_hmd })
     }
 
-    /// Create a `RenderContext` to manually set up rendering for this headset.
-    pub unsafe fn init_render(&self, 
-                              native_window: *mut libc::c_void) -> Result<render::RenderContext, OculusError> {
+    /// Create a `RenderContext` for this headset.
+    pub fn render_to<'a>(&'a self,
+                         target: &'a RenderTarget) -> Result<render::RenderContext, OculusError> {
         use shim::CreateRenderContext;
-        render::RenderContext::new(&self.shim_hmd, 0, native_window)
-    }
-
-    /// Create a `RenderContext` to manually set up rendering for this headset, bound to the
-    /// specified glutin window.
-    #[cfg(feature = "glutin")]
-    pub unsafe fn init_render_glutin(&self,
-                                     window: &glutin::Window) 
-        -> Result<render::RenderContext, OculusError> {
-        #[cfg(windows)]
-        fn native_window(window: &glutin::Window) -> Option<*mut libc::c_void> {
-            unsafe {
-                Some(window.platform_window())
-            }
-        }
-
-        #[cfg(not(windows))]
-        fn native_window(_: &glutin::Window) -> Option<*mut libc::c_void> {
-            None
-        }
-
-        let native_window = native_window(window).unwrap_or(std::ptr::null_mut());
-        self.init_render(native_window)
+        render::RenderContext::new(&self.shim_hmd, target)
     }
 
     /// Returns a `(width, height)` pair representing the native resolution of the HMD.

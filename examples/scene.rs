@@ -34,11 +34,11 @@ fn main() {
         .build_glium()
         .ok().expect("Unable to build Window");
 
-    let render = unsafe {
-        let window = display.get_window().unwrap();
-        hmd.init_render_glutin(&window)
-            .ok().expect("unable to prepare HMD rendering")
-    };
+    // NOTE: keeping this window around will cause rebuild to panic; not sure there's a way around
+    // this with the current glium mutability/rebuild design
+    let window = display.get_window().unwrap();
+    let target = rovr::target::GlutinRenderTarget::new(&window, 1);
+    let render = hmd.render_to(&target).unwrap();
 
     let program = basic_shader::compile(&display);
     let (vertex_buffer, index_buffer) = basic_shader::cube(&display);
