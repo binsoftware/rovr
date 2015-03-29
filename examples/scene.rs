@@ -19,7 +19,7 @@ fn main() {
         .build()
         .ok().expect("Unable to build HMD");
 
-    let monitor = hmd.find_glutin_monitor();
+    let monitor = rovr::target::find_glutin_monitor(&hmd.get_display());
     let builder = match monitor {
         Some(id) => glutin::WindowBuilder::new().with_fullscreen(id),
         None => {

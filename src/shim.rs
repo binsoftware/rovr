@@ -13,9 +13,6 @@ use std::vec::{self, Vec};
 
 use libc;
 
-#[cfg(feature = "glutin")]
-use glutin;
-
 use ffi;
 use OculusError;
 use Eye;
@@ -68,29 +65,38 @@ impl Drop for Context {
     }
 }
 
+/// Platform-specific identifier for the OS display representing an Hmd.
 #[allow(dead_code)] // Per-platform, only one of these enum values is used.
 #[derive(Debug, Eq, PartialEq)]
-pub enum HmdDisplay {
+pub enum HmdDisplayId {
+    /// On OS X, this value is the display ID as it would be returned from
+    /// `CGGetActiveDisplayList`.
     Numeric(u32),
-    Name(String)
+
+    /// On Windows, this value is the device name as would be reported by `EnumDisplayDevices`.
+    Name(String),
+
+    /// On other platforms, a native identifier for this monitor is not reported by the SDK.
+    Unavailable
 }
 
-#[cfg(feature = "glutin")]
-impl PartialEq<glutin::NativeMonitorId> for HmdDisplay {
-    fn eq(&self, other: &glutin::NativeMonitorId) -> bool {
-        match (self, other) {
-            (&HmdDisplay::Numeric(ref s), &glutin::NativeMonitorId::Numeric(ref o)) => s == o,
-            (&HmdDisplay::Name(ref s), &glutin::NativeMonitorId::Name(ref o)) => s == o,
-            _ => false
-        }
-    }
-}
+/// Full details about the system display representing this Hmd. These should be used to find the
+/// correct monitor on which to prepare a rendering window.
+pub struct HmdDisplay {
+    /// Identifier for this monitor, if available.
+    pub id: HmdDisplayId,
 
-#[cfg(feature = "glutin")]
-impl PartialEq<HmdDisplay> for glutin::NativeMonitorId {
-    fn eq(&self, other: &HmdDisplay) -> bool {
-        other == self
-    }
+    /// Left edge of the display region.
+    pub x: i32,
+
+    /// Top edge of the display region.
+    pub y: i32,
+
+    /// Width of the display region.
+    pub width: u32,
+
+    /// Height of the display region.
+    pub height: u32
 }
 
 /// RAII wrapper for an Oculus headset. Provides safe wrappers for access to basic headset
@@ -171,24 +177,27 @@ impl Hmd {
 
     /// Get the native display identifier for the monitor represented by this HMD.
     pub fn get_display(&self) -> HmdDisplay {
-        #[cfg(not(windows))]
-        fn get_display_impl(native_hmd: &ffi::ovrHmdDesc) -> HmdDisplay {
-            HmdDisplay::Numeric(native_hmd.DisplayId as u32)
-        }
-
-        #[cfg(windows)]
-        fn get_display_impl(native_hmd: &ffi::ovrHmdDesc) -> HmdDisplay {
-            let s = unsafe {
-                use std::ffi::CStr;
-                str::from_utf8(CStr::from_ptr(native_hmd.DisplayDeviceName).to_bytes())
-                    .unwrap_or("")
-            };
-            HmdDisplay::Name(String::from_str(s))
-        }
-
         unsafe {
             let ref native_struct = *self.native_hmd;
-            get_display_impl(native_struct)
+            let id = if cfg!(windows) {
+                let s = {
+                    use std::ffi::CStr;
+                    str::from_utf8(CStr::from_ptr(native_struct.DisplayDeviceName).to_bytes())
+                        .unwrap_or("")
+                };
+                HmdDisplayId::Name(String::from_str(s))
+            } else if cfg!(target_os = "macos") {
+                HmdDisplayId::Numeric(native_struct.DisplayId as u32)
+            } else {
+                HmdDisplayId::Unavailable
+            };
+            HmdDisplay {
+                id: id,
+                x: native_struct.WindowsPos.x,
+                y: native_struct.WindowsPos.y,
+                width: native_struct.Resolution.w as u32,
+                height: native_struct.Resolution.h as u32
+            }
         }
     }
 }

@@ -15,8 +15,11 @@ use std::fmt;
 
 mod ffi;
 mod shim;
-pub mod render;
 
+pub use shim::HmdDisplayId;
+pub use shim::HmdDisplay;
+
+pub mod render;
 pub mod target;
 
 /// Error produced while interacting with a wrapped Oculus device.
@@ -235,16 +238,9 @@ impl Hmd {
         self.shim_hmd.resolution()
     }
 
-    /// Find the glutin monitor for this HMD.
-    #[cfg(feature = "glutin")]
-    pub fn find_glutin_monitor(&self) -> Option<glutin::MonitorID> {
-        let hmd_display_id = self.shim_hmd.get_display();
-        for mon in glutin::get_available_monitors() {
-            if mon.get_native_identifier() == hmd_display_id {
-                return Some(mon);
-            }
-        }
-        None
+    /// Return details about the display representing this headset.
+    pub fn get_display(&self) -> HmdDisplay {
+        self.shim_hmd.get_display()
     }
 }
 
