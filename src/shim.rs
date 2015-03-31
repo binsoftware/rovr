@@ -3,6 +3,7 @@
 
 use std::ptr;
 use std::default::Default;
+use std::dynamic_lib::DynamicLibrary;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::string::String;
@@ -22,7 +23,7 @@ use RenderTarget;
 /// supplied message on failure.
 macro_rules! ovr_invoke {
     ($x:expr) => {
-        if $x == '\0' {
+        if $x == ffi::ovrFalse {
             return Err(OculusError::SdkError("$x failed"));
         }
     }
@@ -31,16 +32,68 @@ macro_rules! ovr_invoke {
 /// Invoke an FFI function with an ovrBool return value, and panic on failure.
 macro_rules! ovr_expect {
     ($x:expr) => {
-        if $x == '\0' {
+        if $x == ffi::ovrFalse {
             panic!("$x failed");
         }
     }
 }
 
 /// RAII wrapper for an Oculus context. Ensures only one Context is active at once in the process.
-pub struct Context;
+pub struct Context {
+    function_table: ffi::FunctionTable
+}
 
 static ACTIVE_CONTEXT: atomic::AtomicBool = atomic::ATOMIC_BOOL_INIT;
+
+const PRODUCT_VERSION: &'static str = "0";
+const MAJOR_VERSION: &'static str = "5";
+
+macro_rules! try_load {
+    ($x:expr) => {
+        match $x {
+            Ok(v) => v,
+            Err(v) => return Err(OculusError::OculusRuntimeError(v))
+        }
+    }
+}
+
+// Notes from OVR CAPI shim:
+//
+// Versioned file expectations.
+//
+// Windows: LibOVRRT<BIT_DEPTH>_<PRODUCT_VERSION>_<MAJOR_VERSION>.dll 
+// Example: LibOVRRT64_1_1.dll -- LibOVRRT 64 bit, product 1, major version 1, minor/patch/build
+// numbers unspecified in the name.
+//
+// Mac: LibOVRRT_<PRODUCT_VERSION>.framework/Versions/<MAJOR_VERSION>/LibOVRRT_<PRODUCT_VERSION> 
+// We are not presently using the .framework bundle's Current directory to hold the version number.
+// This may change.
+//
+// Linux: libOVRRT<BIT_DEPTH>_<PRODUCT_VERSION>.so.<MAJOR_VERSION> 
+// The file on disk may contain a minor version number, but a symlink is used to map this
+// major-only version to it.
+
+#[cfg(windows)]
+fn load_ovr() -> Result<DynamicLibrary, OculusError> { 
+    let bits = if cfg!(target_pointer_width = "64") { "64" } else { "32" };
+    let lib_name = format!("LibOVRRT{}_{}_{}", bits, PRODUCT_VERSION, MAJOR_VERSION);
+    Ok(try_load!(DynamicLibrary::open(Some(lib_name.as_ref()))))
+}
+
+#[cfg(target_os = "macos")]
+fn load_ovr() -> Result<DynamicLibrary, OculusError> {
+    let lib_name = format!("LibOVRRT_{0}.framework/Versions/{1}/LibOVRRT_{0}", PRODUCT_VERSION, MAJOR_VERSION);
+    Ok(try_load!(DynamicLibrary::open(Some(lib_name.as_ref()))))
+}
+
+#[cfg(target_os = "linux")]
+fn load_ovr() -> Result<UnsafeDynamicLibrary, OculusError> {
+    let bits = if cfg!(target_pointer_width = "64") { "64" } else { "32" };
+    let lib_name = format!("/usr/local/lib/libOVRRT{}_{}.so.{}", bits, PRODUCT_VERSION, MAJOR_VERSION);
+    unsafe {
+        Ok(try_load!(UnsafeDynamicLibrary::open(Some(lib_name.as_ref()))))
+    }
+}
 
 impl Context {
     pub fn new() -> Result<Context, OculusError> { 
@@ -48,17 +101,28 @@ impl Context {
         if was_active {
             return Err(OculusError::DuplicateContext);
         }
-        unsafe {
-            ovr_invoke!(ffi::ovr_Initialize());
-        }
-        Ok(Context)
+
+        let lib = try!(load_ovr());
+        let function_table = unsafe {
+            let function_table = try_load!(ffi::FunctionTable::load(lib));
+            let params: ffi::ovrInitParams = Default::default();
+            ovr_invoke!(function_table.ovr_Initialize(&params));
+            function_table
+        };
+        Ok(Context {
+            function_table: function_table
+        })
+    }
+
+    pub fn invoker(&self) -> &ffi::FunctionTable {
+        &self.function_table
     }
 }
 
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            ffi::ovr_Shutdown();
+            self.invoker().ovr_Shutdown();
             let was_active = ACTIVE_CONTEXT.swap(false, atomic::Ordering::SeqCst);
             assert!(was_active);
         }
@@ -103,7 +167,7 @@ pub struct HmdDisplay {
 /// metadata and tracking state.
 pub struct Hmd {
     native_hmd: *mut ffi::ovrHmdDesc,
-    _owning_context: Rc<Context>
+    context: Rc<Context>
 }
 
 impl Hmd {
@@ -112,14 +176,18 @@ impl Hmd {
     pub fn new(allow_debug: bool, owning_context: Rc<Context>) -> Result<Hmd, OculusError> {
         let hmd = {
             unsafe {
-                let h = ffi::ovrHmd_Create(0);
-                if h.is_null() && allow_debug { ffi::ovrHmd_CreateDebug() } else { h }
+                let h = owning_context.invoker().ovrHmd_Create(0);
+                if h.is_null() && allow_debug { 
+                    owning_context.invoker().ovrHmd_CreateDebug(ffi::ovrHmd_DK2) 
+                } else { 
+                    h
+                }
             }
         };
         if hmd.is_null() { 
             Err(OculusError::SdkError("ovrHmd_Create failed"))
         } else { 
-            Ok(Hmd{ native_hmd: hmd, _owning_context: owning_context })
+            Ok(Hmd{ native_hmd: hmd, context: owning_context })
         }
     }
 
@@ -127,7 +195,7 @@ impl Hmd {
     /// more details.
     pub fn set_caps(&mut self, caps: ffi::ovrHmdCaps) {
         unsafe {
-            ffi::ovrHmd_SetEnabledCaps(self.native_hmd, caps);
+            self.context.invoker().ovrHmd_SetEnabledCaps(self.native_hmd, caps);
         }
     }
 
@@ -138,22 +206,22 @@ impl Hmd {
         unsafe {
             // Ignore the return value; the underlying implementation is already idempotent, and
             // queues up the dismissal if it isn't ready yet.
-            ffi::ovrHmd_DismissHSWDisplay(self.native_hmd);
+            self.context.invoker().ovrHmd_DismissHSWDisplay(self.native_hmd);
         }
     }
 
     pub fn recenter_pose(&self) {
         unsafe {
-            ffi::ovrHmd_RecenterPose(self.native_hmd);
+            self.context.invoker().ovrHmd_RecenterPose(self.native_hmd);
         }
     }
 
     /// Enable tracking for this HMD with the specified capabilities.
     pub fn configure_tracking(&mut self, caps: ffi::ovrTrackingCaps) -> Result<(), OculusError> {
         unsafe {
-            ovr_invoke!(ffi::ovrHmd_ConfigureTracking(self.native_hmd, 
-                                                      caps, 
-                                                      ffi::ovrTrackingCaps::empty()));
+            ovr_invoke!(self.context.invoker().ovrHmd_ConfigureTracking(self.native_hmd, 
+                                                                        caps, 
+                                                                        ffi::ovrTrackingCaps::empty()));
         }
         Ok(())
     }
@@ -205,7 +273,7 @@ impl Hmd {
 impl Drop for Hmd {
     fn drop(&mut self) {
         unsafe {
-            ffi::ovrHmd_Destroy(self.native_hmd);
+            self.context.invoker().ovrHmd_Destroy(self.native_hmd);
         }
     }
 }
@@ -266,26 +334,27 @@ impl<'a> CreateRenderContext<'a> for RenderContext<'a> {
     fn new(owning_hmd: &'a Hmd, 
            target: &'a RenderTarget) -> Result<RenderContext<'a>, OculusError> {
         let (w, h) = owning_hmd.resolution();
+        let invoker = owning_hmd.context.invoker();
         let metadata = unsafe {
             let config = GlConfigBuilder::new(w, h, target.get_multisample() as i32)
                 .native_window(target.get_native_window())
                 .build();
 
             // TODO: pull in caps as an argument
-            let caps = ffi::ovrDistortionCap_Chromatic |
+            let caps = 
                 ffi::ovrDistortionCap_TimeWarp |
                 ffi::ovrDistortionCap_Overdrive;
             let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
-            ovr_invoke!(ffi::ovrHmd_ConfigureRendering(owning_hmd.native_hmd,
-                                                       &config,
-                                                       caps,
-                                                       &owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
-                                                       &mut eye_render_desc));
+            ovr_invoke!(invoker.ovrHmd_ConfigureRendering(owning_hmd.native_hmd,
+                                                          &config,
+                                                          caps,
+                                                          &owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
+                                                          &mut eye_render_desc));
             if owning_hmd.is_direct() {
-                ovr_invoke!(ffi::ovrHmd_AttachToWindow(owning_hmd.native_hmd, 
-                                                       target.get_native_window(), 
-                                                       ptr::null(), 
-                                                       ptr::null()));
+                ovr_invoke!(invoker.ovrHmd_AttachToWindow(owning_hmd.native_hmd, 
+                                                          target.get_native_window(), 
+                                                          ptr::null(), 
+                                                          ptr::null()));
             }
             RenderMetadata::new(&owning_hmd, &eye_render_desc[0], &eye_render_desc[1])
         };
@@ -334,11 +403,12 @@ impl<'a> Drop for RenderContext<'a> {
     fn drop(&mut self) {
         let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
         unsafe {
-            ovr_expect!(ffi::ovrHmd_ConfigureRendering(self.owning_hmd.native_hmd,
-                                                       ptr::null(),
-                                                       ffi::ovrDistortionCaps::empty(),
-                                                       &self.owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
-                                                       &mut eye_render_desc));
+            let invoker = self.owning_hmd.context.invoker();
+            ovr_expect!(invoker.ovrHmd_ConfigureRendering(self.owning_hmd.native_hmd,
+                                                          ptr::null(),
+                                                          ffi::ovrDistortionCaps::empty(),
+                                                          &self.owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
+                                                          &mut eye_render_desc));
         }
     }
 }
@@ -376,9 +446,16 @@ impl PerEyeRenderMetadata {
            eye_index: i32,
            fov: ffi::ovrFovPort) -> PerEyeRenderMetadata {
         unsafe {
+            let invoker = hmd.context.invoker();
             PerEyeRenderMetadata {
-                texture_size: ffi::ovrHmd_GetFovTextureSize(hmd.native_hmd, eye_index, fov, 1f32),
-                projection: ffi::ovrMatrix4f_Projection(render_desc.Fov, 0.2f32, 100f32, '1')
+                texture_size: invoker.ovrHmd_GetFovTextureSize(hmd.native_hmd, 
+                                                               eye_index, 
+                                                               fov, 
+                                                               1f32),
+                projection: invoker.ovrMatrix4f_Projection(render_desc.Fov, 
+                                                           0.2f32, 
+                                                           100f32, 
+                                                           ffi::ovrTrue)
             }
         }
     }
@@ -451,13 +528,14 @@ impl<'a> Frame<'a> {
     pub fn new(owning_context: &'a RenderContext, 
                texture_binding: &'a TextureBinding) -> Frame<'a> {
         let mut poses: [ffi::ovrPosef; 2] = [Default::default(); 2];
+        let invoker = owning_context.owning_hmd.context.invoker();
         unsafe {
-            ffi::ovrHmd_BeginFrame(owning_context.owning_hmd.native_hmd, 0);
-            ffi::ovrHmd_GetEyePoses(owning_context.owning_hmd.native_hmd,
-                                    0,
-                                    &owning_context.metadata.offsets,
-                                    &mut poses,
-                                    ptr::null_mut());
+            invoker.ovrHmd_BeginFrame(owning_context.owning_hmd.native_hmd, 0);
+            invoker.ovrHmd_GetEyePoses(owning_context.owning_hmd.native_hmd,
+                                       0,
+                                       &owning_context.metadata.offsets,
+                                       &mut poses,
+                                       ptr::null_mut());
         }
 
         Frame {
@@ -502,9 +580,10 @@ impl<'a> Frame<'a> {
 impl<'a> Drop for Frame<'a> {
     fn drop(&mut self) {
         unsafe {
-            ffi::ovrHmd_EndFrame(self.owning_context.owning_hmd.native_hmd,
-                                 &self.poses,
-                                 &self.textures.textures);
+            let invoker = self.owning_context.owning_hmd.context.invoker();
+            invoker.ovrHmd_EndFrame(self.owning_context.owning_hmd.native_hmd,
+                                    &self.poses,
+                                    &self.textures.textures);
         }
     }
 }

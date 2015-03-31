@@ -2,7 +2,7 @@
 //! metadata and tracking information, plus helpers for attaching the headset
 //! to an OpenGL rendering context.
 
-#![feature(unsafe_destructor, core, collections)]
+#![feature(unsafe_destructor, core, collections, std_misc, convert)]
 
 #[macro_use] extern crate bitflags;
 extern crate libc;
@@ -25,6 +25,10 @@ pub mod target;
 /// Error produced while interacting with a wrapped Oculus device.
 #[derive(Clone, Debug)]
 pub enum OculusError {
+    /// Error while attempting to find the Oculus runtime. This probably means a supported version
+    /// of the runtime is not installed.
+    OculusRuntimeError(String),
+
     /// Error while interacting directly with the Oculus SDK. The SDK doesn't provide more detailed
     /// error information, but the included string provides some basic context about what was
     /// happening at the time of failure.
@@ -38,6 +42,7 @@ pub enum OculusError {
 impl fmt::Display for OculusError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &OculusError::OculusRuntimeError(ref description) => f.write_str(description),
             &OculusError::SdkError(ref description) => f.write_str(description),
             &OculusError::DuplicateContext => f.write_str(
                 "Context creation failed because another Context is already active in this process")
@@ -167,12 +172,6 @@ impl HmdBuilder {
         self
     }
     
-    /// Write directly in pentile color mapping format.
-    pub fn direct_pentile<'f>(&'f mut self) -> &'f mut HmdBuilder {
-        self.caps.insert(ffi::ovrHmdCap_DirectPentile);
-        self
-    }
-
     /// Disable VSync.
     pub fn no_vsync<'f>(&'f mut self) -> &'f mut HmdBuilder {
         self.caps.insert(ffi::ovrHmdCap_NoVSync);

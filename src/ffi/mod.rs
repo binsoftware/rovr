@@ -1,16 +1,17 @@
-#![allow(dead_code)]
-#![allow(non_upper_case_globals)]
+#![allow(dead_code, non_upper_case_globals, non_camel_case_types, non_snake_case)]
 
-#[allow(non_camel_case_types)]
-type ovrBool = char;
+type ovrBool = u8;
+pub const ovrTrue: u8 = 1;
+pub const ovrFalse: u8 = 0;
 
 use libc;
 use std::default::Default;
+use std::dynamic_lib::DynamicLibrary;
+use std::mem;
 use std::ptr;
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrFovPort {
     pub UpTan: f32,
     pub DownTan: f32,
@@ -34,7 +35,6 @@ pub struct ovrVector2i {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrRecti {
     pub Pos: ovrVector2i,
     pub Size: ovrSizei
@@ -57,7 +57,6 @@ pub struct ovrVector3f {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrMatrix4f {
     pub M: [[f32; 4]; 4]
 }
@@ -73,7 +72,6 @@ pub struct ovrQuatf {
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrPosef {
     pub Orientation: ovrQuatf,
     pub Position: ovrVector3f
@@ -93,6 +91,45 @@ impl Default for ovrMatrix4f {
 bitflags!(
     #[repr(C)]
     #[derive(Default)]
+    flags ovrInitFlags: u32 {
+        const ovrInit_Debug = 0x00000001,
+        const ovrInit_ServerOptional = 0x00000002,
+        const ovrInit_RequestVersion = 0x00000004,
+        const ovrInit_ForceNoDebug = 0x00000008
+    }
+);
+
+#[repr(C)]
+pub struct ovrInitParams {
+    Flags: u32,
+    RequestedMinorVersion: u32,
+    LogCallback: *const libc::c_void,
+    ConnectionTimeoutMS: u32
+}
+
+impl Default for ovrInitParams {
+    fn default() -> ovrInitParams {
+        ovrInitParams {
+            Flags: Default::default(),
+            RequestedMinorVersion: Default::default(),
+            LogCallback: ptr::null(),
+            ConnectionTimeoutMS: Default::default()
+        }
+    }
+}
+
+pub type ovrHmdType = u32;
+pub const ovrHmd_None: ovrHmdType = 0;
+pub const ovrHmd_DK1: ovrHmdType = 3;
+pub const ovrHmd_DKHD: ovrHmdType = 4;
+pub const ovrHmd_DK2: ovrHmdType = 6;
+pub const ovrHmd_BlackStar: ovrHmdType = 7;
+pub const ovrHmd_CB: ovrHmdType = 8;
+pub const ovrHmd_Other: ovrHmdType = 9;
+
+bitflags!(
+    #[repr(C)]
+    #[derive(Default)]
     flags ovrHmdCaps: u32 {
         const ovrHmdCap_Present = 0x0001,
         const ovrHmdCap_Available = 0x0002,
@@ -102,10 +139,9 @@ bitflags!(
         const ovrHmdCap_DisplayOff = 0x0040,
         const ovrHmdCap_LowPersistence = 0x0080,
         const ovrHmdCap_DynamicPrediction = 0x0200,
-        const ovrHmdCap_DirectPentile = 0x0400,
         const ovrHmdCap_NoVSync = 0x1000,
-        const ovrHmdCap_Writable_Mask = 0x32F0,
-        const ovrHmdCap_Service_Mask = 0x22F0
+        const ovrHmdCap_Writable_Mask = 0x32C0,
+        const ovrHmdCap_Service_Mask = 0x22C0
     }
 );
 
@@ -124,7 +160,6 @@ bitflags!(
     #[repr(C)]
     #[derive(Default)]
     flags ovrDistortionCaps: u32 {
-        const ovrDistortionCap_Chromatic = 0x01,
         const ovrDistortionCap_TimeWarp = 0x02,
         const ovrDistortionCap_Vignette = 0x08,
         const ovrDistortionCap_NoRestore = 0x10,
@@ -134,7 +169,8 @@ bitflags!(
         const ovrDistortionCap_HqDistortion = 0x100,
         const ovrDistortionCap_LinuxDevFullscreen = 0x200,
         const ovrDistortionCap_ComputeShader = 0x400,
-        const ovrDistortionCap_ProfileNoTimewarpSpinWaits = 0x10000
+        const ovrDistortionCap_TimewarpJitDelay = 0x1000,
+        const ovrDistortionCap_ProfileNoSpinWaits = 0x10000
     }
 );
 
@@ -142,10 +178,9 @@ bitflags!(
 pub struct ovrHmdStruct;
 
 #[repr(C)]
-#[allow(non_snake_case)]
 pub struct ovrHmdDesc {
     pub Handle: *mut ovrHmdStruct,
-    pub Type: u32,
+    pub Type: ovrHmdType,
     pub ProductName: *const u8,
     pub Manufacturer: *const u8,
     pub VendorId: i16,
@@ -169,19 +204,14 @@ pub struct ovrHmdDesc {
     pub DisplayId: i32
 }
 
-bitflags!(
-    #[repr(C)]
-    #[derive(Default)]
-    flags ovrRenderAPIType: u32 {
-        const ovrRenderAPI_None = 0,
-        const ovrRenderAPI_OpenGL = 1,
-        const ovrRenderAPI_Android_GLES = 2,
-        const ovrRenderAPI_D3D9 = 3,
-        const ovrRenderAPI_D3D10 = 4,
-        const ovrRenderAPI_D3D11 = 5,
-        const ovrRenderAPI_Count = 6
-    }
-);
+pub type ovrRenderAPIType = u32;
+pub const ovrRenderAPI_None: ovrRenderAPIType = 0;
+pub const ovrRenderAPI_OpenGL: ovrRenderAPIType = 1;
+pub const ovrRenderAPI_Android_GLES: ovrRenderAPIType = 2;
+pub const ovrRenderAPI_D3D9: ovrRenderAPIType = 3;
+pub const ovrRenderAPI_D3D10: ovrRenderAPIType = 4;
+pub const ovrRenderAPI_D3D11: ovrRenderAPIType = 5;
+pub const ovrRenderAPI_Count: ovrRenderAPIType = 6;
 
 #[repr(C)]
 #[cfg(target_os = "linux")]
@@ -189,7 +219,7 @@ pub struct _XDisplay;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-#[allow(non_snake_case, raw_pointer_derive)]
+#[allow(raw_pointer_derive)]
 pub struct ovrGLConfig {
     pub API: ovrRenderAPIType,
     pub BackBufferSize: ovrSizei,
@@ -197,94 +227,63 @@ pub struct ovrGLConfig {
 
     #[cfg(windows)]
     pub Window: *const libc::c_void,
-
     #[cfg(windows)]
     pub HDC: *const libc::c_void,
+    #[cfg(windows)]
+    pub _PAD_: [usize; 6],
 
     #[cfg(target_os = "linux")]
     pub Disp: *const _XDisplay,
+    #[cfg(target_os = "linux")]
+    pub _PAD_: [usize; 7],
+
+    #[cfg(all(not(windows), not(target_os = "linux")))]
+    pub _PAD_: [usize; 8],
 }
 
 impl Default for ovrGLConfig {
-    #[cfg(windows)]
     fn default() -> ovrGLConfig {
-        ovrGLConfig {
-            API: Default::default(),
-            BackBufferSize: Default::default(),
-            Multisample: Default::default(),
-            Window: ptr::null_mut::<libc::c_void>(),
-            HDC: ptr::null_mut::<libc::c_void>()
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn default() -> ovrGLConfig {
-        ovrGLConfig {
-            API: Default::default(),
-            BackBufferSize: Default::default(),
-            Multisample: Default::default(),
-            Disp: ptr::null_mut::<_XDisplay>()
-        }
-    }
-
-    #[cfg(all(not(windows), not(target_os = "linux")))]
-    fn default() -> ovrGLConfig {
-        ovrGLConfig {
-            API: Default::default(),
-            BackBufferSize: Default::default(),
-            Multisample: Default::default(),
+        unsafe {
+            mem::zeroed()
         }
     }
 }
 
+// We're representing the GL-specific half of the union ovrGLTexture (specifically,
+// ovrGLTextureData), whose size is defined by the OVR type ovrTexture.  ovrTexture contains API +
+// TextureSize + RenderViewport in its header, plus a ptr-sized 8-element array to pad out the rest
+// of the struct for rendering system-specific values. The OpenGL struct contains just one u32, so
+// for 32-bit builds we need to pad out the remaining 7 * 4 bytes. The 64-bit version of the native
+// struct ends up inheriting additional padding due to alignment. offsetof(TexId) is 28, so the
+// "on-books" 92 byte struct gets padded by VC to 96 bytes. If we just add 60 bytes--that is, the
+// 8 * 8 - 4 bytes remaining in the platform-specific data region ovr ovrTexture--Rust doesn't pad
+// the way VC does. So we manually add the additional 4 bytes by promoting _PAD1_ to a u64.
 #[repr(C)]
 #[derive(Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrGLTexture {
     pub API: ovrRenderAPIType,
     pub TextureSize: ovrSizei,
     pub RenderViewport: ovrRecti,
-    pub _PAD0_: u32,
 
     pub TexId: u32,
 
+    // See above notes about alignment.
     #[cfg(target_pointer_width = "64")]
-    pub _PAD1_: [u32; 15], // 8 * ptr_size total padding, -32bits for the texId
+    pub _PAD1_: u64,
 
-    #[cfg(target_pointer_width = "32")]
-    pub _PAD1_: [u32; 7], 
+    pub _PAD2_: [usize; 7],
 }
 
-// Because there's no Default impl for arrays, we need to fill this whole thing in ourselves
 impl Default for ovrGLTexture {
-    #[cfg(target_pointer_width = "64")]
     fn default() -> ovrGLTexture {
-        ovrGLTexture {
-            API: Default::default(),
-            TextureSize: Default::default(),
-            RenderViewport: Default::default(),
-            _PAD0_: Default::default(),
-            TexId: Default::default(),
-            _PAD1_: [0u32; 15]
-        }
-    }
-
-    #[cfg(target_pointer_width = "32")]
-    fn default() -> ovrGLTexture {
-        ovrGLTexture {
-            API: Default::default(),
-            TextureSize: Default::default(),
-            RenderViewport: Default::default(),
-            _PAD0_: Default::default(),
-            TexId: Default::default(),
-            _PAD1_: [0u32; 7]
+        unsafe {
+            mem::zeroed()
         }
     }
 }
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrEyeRenderDesc {
     pub Eye: u32,
     pub Fov: ovrFovPort,
@@ -294,14 +293,10 @@ pub struct ovrEyeRenderDesc {
 }
 
 #[repr(C)]
-#[derive(Default, Clone, Copy)]
-pub struct ovrTrackingState;
-
-#[repr(C)]
 #[derive(Clone, Copy)]
-#[allow(non_snake_case)]
 pub struct ovrFrameTiming {
     pub DeltaSeconds: f32,
+    pub Pad: f32,
     pub ThisFrameSeconds: f64,
     pub TimewarpPointSeconds: f64,
     pub NextFrameSeconds: f64,
@@ -309,38 +304,87 @@ pub struct ovrFrameTiming {
     pub EyeScanoutSeconds: [f64; 2]
 }
 
-#[link(name="ovr")]
-extern "C" {
-    pub fn ovr_Initialize() -> ovrBool;
-    pub fn ovr_Shutdown();
+macro_rules! function_table {
+    ( $( fn $func_name:ident( $( $param_name:ident: $param_type:ty ),* ) -> $ret_type:ty ),+ ) => {
+        #[allow(non_snake_case)]
+        struct FunctionTablePtrs {
+            $(
+                $func_name: unsafe extern "C" fn($( $param_type, )*) -> $ret_type,
+            )*
+        }
 
-    pub fn ovrHmd_Create(index: i32) -> *mut ovrHmdDesc;
-    pub fn ovrHmd_CreateDebug() -> *mut ovrHmdDesc;
-    pub fn ovrHmd_Destroy(hmd: *mut ovrHmdDesc);
+        pub struct FunctionTable {
+            ptrs: FunctionTablePtrs,
+            lib: DynamicLibrary
+        }
 
-    pub fn ovrHmd_SetEnabledCaps(hmd: *mut ovrHmdDesc, hmdCaps: ovrHmdCaps);
-    pub fn ovrHmd_DismissHSWDisplay(hmd: *mut ovrHmdDesc) -> ovrBool;
-    pub fn ovrHmd_RecenterPose(hmd: *mut ovrHmdDesc);
-    pub fn ovrHmd_ConfigureTracking(hmd: *mut ovrHmdDesc, supportedTrackingCaps: ovrTrackingCaps, requiredTrackingCaps: ovrTrackingCaps) -> ovrBool;
-    pub fn ovrHmd_ConfigureRendering(hmd: *mut ovrHmdDesc, 
-                                     apiConfig: *const ovrGLConfig, 
-                                     distortionCaps: ovrDistortionCaps, 
-                                     eyeFovIn: *const [ovrFovPort; 2], 
-                                     eyeRenderDescOut: *mut [ovrEyeRenderDesc; 2]) -> ovrBool;
-    pub fn ovrHmd_AttachToWindow(hmd: *mut ovrHmdDesc,
-                                 window: *const libc::c_void,
-                                 destMirrorRect: *const ovrRecti,
-                                 sourceRenderTargetRect: *const ovrRecti) -> ovrBool;
-    pub fn ovrHmd_GetFovTextureSize(hmd: *mut ovrHmdDesc, eye: i32, fov: ovrFovPort, pixelsPerDisplayPixel: f32) -> ovrSizei;
+        #[allow(non_snake_case)]
+        impl FunctionTable {
+            pub unsafe fn load(lib: DynamicLibrary) -> Result<FunctionTable, String> {
+                let ptrs = FunctionTablePtrs {
+                    $(
+                        $func_name: mem::transmute(
+                            try!(lib.symbol::<*const libc::c_void>(stringify!($func_name)))
+                        ),
+                    )*
+                };
+                Ok(FunctionTable {
+                    ptrs: ptrs,
+                    lib: lib
+                })
+            }
 
-    pub fn ovrHmd_BeginFrame(hmd: *mut ovrHmdDesc, frameIndex: u32) -> ovrFrameTiming;
-    pub fn ovrHmd_GetEyePoses(hmd: *mut ovrHmdDesc, 
-                              frameIndex: u32, 
-                              hmdToEyeViewOffset: *const [ovrVector3f; 2], 
-                              outEyePoses: *mut [ovrPosef; 2], 
-                              outHmdTrackingState: *mut ovrTrackingState);
-    pub fn ovrHmd_EndFrame(hmd: *mut ovrHmdDesc, renderPose: *const [ovrPosef; 2], eyeTexture: *const [ovrGLTexture; 2]);
-
-    pub fn ovrMatrix4f_Projection(fov: ovrFovPort, znear: f32, zfar: f32, rightHanded: ovrBool) -> ovrMatrix4f;
+            $(
+                #[inline]
+                pub unsafe fn $func_name(&self, $( $param_name: $param_type),*) -> $ret_type {
+                    (self.ptrs.$func_name)($( $param_name, )*)
+                }
+            )*
+        }
+    };
 }
+
+function_table!(
+    fn ovr_Initialize(params: *const ovrInitParams) -> ovrBool,
+    fn ovr_Shutdown() -> (),
+
+    fn ovrHmd_Create(index: i32) -> *mut ovrHmdDesc,
+    fn ovrHmd_CreateDebug(the_type: ovrHmdType) -> *mut ovrHmdDesc,
+    fn ovrHmd_Destroy(hmd: *mut ovrHmdDesc) -> (),
+
+    fn ovrHmd_SetEnabledCaps(hmd: *mut ovrHmdDesc, hmdCaps: ovrHmdCaps) -> (),
+    fn ovrHmd_DismissHSWDisplay(hmd: *mut ovrHmdDesc) -> ovrBool,
+    fn ovrHmd_RecenterPose(hmd: *mut ovrHmdDesc) -> (),
+    fn ovrHmd_ConfigureTracking(hmd: *mut ovrHmdDesc, 
+                                supportedTrackingCaps: ovrTrackingCaps, 
+                                requiredTrackingCaps: ovrTrackingCaps) -> ovrBool,
+    fn ovrHmd_ConfigureRendering(hmd: *mut ovrHmdDesc, 
+                                 apiConfig: *const ovrGLConfig, 
+                                 distortionCaps: ovrDistortionCaps, 
+                                 eyeFovIn: *const [ovrFovPort; 2], 
+                                 eyeRenderDescOut: *mut [ovrEyeRenderDesc; 2]) -> ovrBool,
+    fn ovrHmd_AttachToWindow(hmd: *mut ovrHmdDesc,
+                             window: *const libc::c_void,
+                             destMirrorRect: *const ovrRecti,
+                             sourceRenderTargetRect: *const ovrRecti) -> ovrBool,
+    fn ovrHmd_GetFovTextureSize(hmd: *mut ovrHmdDesc, 
+                                eye: i32, 
+                                fov: ovrFovPort, 
+                                pixelsPerDisplayPixel: f32) -> ovrSizei,
+
+    fn ovrHmd_BeginFrame(hmd: *mut ovrHmdDesc, frameIndex: u32) -> ovrFrameTiming,
+    fn ovrHmd_GetEyePoses(hmd: *mut ovrHmdDesc, 
+                          frameIndex: u32, 
+                          hmdToEyeViewOffset: *const [ovrVector3f; 2], 
+                          outEyePoses: *mut [ovrPosef; 2], 
+                          outHmdTrackingState: *mut libc::c_void) -> (),
+    fn ovrHmd_EndFrame(hmd: *mut ovrHmdDesc, 
+                       renderPose: *const [ovrPosef; 2], 
+                       eyeTexture: *const [ovrGLTexture; 2]) -> (),
+
+    fn ovrMatrix4f_Projection(fov: ovrFovPort, 
+                              znear: f32, 
+                              zfar: f32, 
+                              rightHanded: ovrBool) -> ovrMatrix4f
+);
 
