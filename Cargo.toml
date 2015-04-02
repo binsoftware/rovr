@@ -8,17 +8,26 @@ authors = ["Ryan Stewart <ryan@binsoftware.com>"]
 default = ["glutin"]
 
 [dependencies]
-bitflags = "*"
-libc = "*"
+bitflags = "0.1.1"
+libc = "0.1.5"
 
 [dependencies.glutin]
-version = "*"
+version = "0.0.22"
 optional = true
 
-[dependencies.ovr_sys]
-git = "https://github.com/binsoftware/OculusSDK"
-branch = "cargo"
+[target.i686-pc-windows-gnu.dependencies]
+winapi = "0.1.17"
+kernel32-sys = "0.1.0"
 
-[dev-dependencies]
-cgmath = "*"
-glium = "*"
+[target.x86_64-pc-windows-gnu.dependencies]
+winapi = "0.1.17"
+kernel32-sys = "0.1.0"
+
+[dev-dependencies.glium]
+version = "0.2.1"
+default-features = false
+features = ["gl_read_buffer", "gl_depth_textures"]
+
+[dev-dependencies.cgmath]
+git = "https://github.com/bjz/cgmath-rs"
+branch = "rust-1.0"

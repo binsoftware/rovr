@@ -3,14 +3,12 @@
 
 use std::ptr;
 use std::default::Default;
-use std::dynamic_lib::DynamicLibrary;
+use ffi::UnsafeDynamicLibrary;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::string::String;
-#[cfg(windows)]
-use std::str;
 use std::sync::atomic;
-use std::vec::{self, Vec};
+use std::vec;
 
 use libc;
 
@@ -74,16 +72,16 @@ macro_rules! try_load {
 // major-only version to it.
 
 #[cfg(windows)]
-fn load_ovr() -> Result<DynamicLibrary, OculusError> { 
+fn load_ovr() -> Result<UnsafeDynamicLibrary, OculusError> { 
     let bits = if cfg!(target_pointer_width = "64") { "64" } else { "32" };
     let lib_name = format!("LibOVRRT{}_{}_{}", bits, PRODUCT_VERSION, MAJOR_VERSION);
-    Ok(try_load!(DynamicLibrary::open(Some(lib_name.as_ref()))))
+    Ok(try_load!(unsafe { UnsafeDynamicLibrary::open(Some(lib_name.as_ref())) }))
 }
 
 #[cfg(target_os = "macos")]
-fn load_ovr() -> Result<DynamicLibrary, OculusError> {
+fn load_ovr() -> Result<UnsafeDynamicLibrary, OculusError> {
     let lib_name = format!("LibOVRRT_{0}.framework/Versions/{1}/LibOVRRT_{0}", PRODUCT_VERSION, MAJOR_VERSION);
-    Ok(try_load!(DynamicLibrary::open(Some(lib_name.as_ref()))))
+    Ok(try_load!(unsafe { UnsafeDynamicLibrary::open(Some(lib_name.as_ref())) }))
 }
 
 #[cfg(target_os = "linux")]
@@ -230,7 +228,7 @@ impl Hmd {
     /// Desktop mode.
     pub fn is_direct(&self) -> bool {
         unsafe {
-            let h = self.native_hmd.as_ref().unwrap();
+            let h = &*self.native_hmd;
             !h.HmdCaps.contains(ffi::ovrHmdCap_ExtendDesktop)
         }
     }
@@ -250,10 +248,9 @@ impl Hmd {
             let id = if cfg!(windows) {
                 let s = {
                     use std::ffi::CStr;
-                    str::from_utf8(CStr::from_ptr(native_struct.DisplayDeviceName).to_bytes())
-                        .unwrap_or("")
+                    CStr::from_ptr(native_struct.DisplayDeviceName).to_bytes()
                 };
-                HmdDisplayId::Name(String::from_str(s))
+                HmdDisplayId::Name(String::from_utf8_lossy(s).into_owned())
             } else if cfg!(target_os = "macos") {
                 HmdDisplayId::Numeric(native_struct.DisplayId as u32)
             } else {
@@ -345,10 +342,11 @@ impl<'a> CreateRenderContext<'a> for RenderContext<'a> {
                 ffi::ovrDistortionCap_TimeWarp |
                 ffi::ovrDistortionCap_Overdrive;
             let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
+            let hmd_data = &*owning_hmd.native_hmd;
             ovr_invoke!(invoker.ovrHmd_ConfigureRendering(owning_hmd.native_hmd,
                                                           &config,
                                                           caps,
-                                                          &owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
+                                                          &hmd_data.MaxEyeFov,
                                                           &mut eye_render_desc));
             if owning_hmd.is_direct() {
                 ovr_invoke!(invoker.ovrHmd_AttachToWindow(owning_hmd.native_hmd, 
@@ -398,16 +396,16 @@ impl<'a> RenderContext<'a> {
     }
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for RenderContext<'a> {
     fn drop(&mut self) {
         let mut eye_render_desc: [ffi::ovrEyeRenderDesc; 2] = [Default::default(); 2];
         unsafe {
             let invoker = self.owning_hmd.context.invoker();
+            let hmd_data = &*self.owning_hmd.native_hmd;
             ovr_expect!(invoker.ovrHmd_ConfigureRendering(self.owning_hmd.native_hmd,
                                                           ptr::null(),
                                                           ffi::ovrDistortionCaps::empty(),
-                                                          &self.owning_hmd.native_hmd.as_ref().unwrap().MaxEyeFov,
+                                                          &hmd_data.MaxEyeFov,
                                                           &mut eye_render_desc));
         }
     }
@@ -425,7 +423,7 @@ impl RenderMetadata {
            left: &ffi::ovrEyeRenderDesc,
            right: &ffi::ovrEyeRenderDesc) -> RenderMetadata {
         let h = unsafe {
-            hmd.native_hmd.as_ref().unwrap()
+            &*hmd.native_hmd
         };
         RenderMetadata {
             left: PerEyeRenderMetadata::new(hmd, left, 0, h.MaxEyeFov[0]),
@@ -506,7 +504,7 @@ pub type Vector3 = [f32; 3];
 pub type Matrix4 = [[f32; 4]; 4];
 
 /// A single eye's pose for a frame.
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub struct FrameEyePose {
     pub eye: Eye,
     pub orientation: Quaternion,
@@ -576,7 +574,6 @@ impl<'a> Frame<'a> {
     }
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for Frame<'a> {
     fn drop(&mut self) {
         unsafe {

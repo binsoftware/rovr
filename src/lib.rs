@@ -2,10 +2,10 @@
 //! metadata and tracking information, plus helpers for attaching the headset
 //! to an OpenGL rendering context.
 
-#![feature(unsafe_destructor, core, collections, std_misc, convert)]
-
 #[macro_use] extern crate bitflags;
 extern crate libc;
+#[cfg(windows)] extern crate winapi;
+#[cfg(windows)] extern crate kernel32;
 
 #[cfg(feature = "glutin")]
 extern crate glutin;

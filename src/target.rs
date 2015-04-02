@@ -11,6 +11,7 @@ mod glutin_target {
 
     /// Wrapper to use a glutin window as a render target.
     pub struct GlutinRenderTarget<'a> {
+        #[allow(dead_code)] // only used on windows
         window: &'a glutin::Window,
         multisample: u32
     }
@@ -42,7 +43,8 @@ mod glutin_target {
         // glutin currently panics for non-windows platforms if we even ask for the native window, so
         // don't!
         #[cfg(not(windows))]
-        fn get_native_window(&self) -> *const libc::c_void {
+        unsafe fn get_native_window(&self) -> *const libc::c_void {
+            use std::ptr;
             ptr::null()
         }
     }

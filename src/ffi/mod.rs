@@ -4,11 +4,14 @@ type ovrBool = u8;
 pub const ovrTrue: u8 = 1;
 pub const ovrFalse: u8 = 0;
 
+mod dynamic_lib;
+
 use libc;
 use std::default::Default;
-use std::dynamic_lib::DynamicLibrary;
 use std::mem;
 use std::ptr;
+
+pub use ffi::dynamic_lib::UnsafeDynamicLibrary;
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
@@ -315,12 +318,12 @@ macro_rules! function_table {
 
         pub struct FunctionTable {
             ptrs: FunctionTablePtrs,
-            lib: DynamicLibrary
+            lib: UnsafeDynamicLibrary
         }
 
         #[allow(non_snake_case)]
         impl FunctionTable {
-            pub unsafe fn load(lib: DynamicLibrary) -> Result<FunctionTable, String> {
+            pub unsafe fn load(lib: UnsafeDynamicLibrary) -> Result<FunctionTable, String> {
                 let ptrs = FunctionTablePtrs {
                     $(
                         $func_name: mem::transmute(

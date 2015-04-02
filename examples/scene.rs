@@ -1,6 +1,4 @@
-﻿#![feature(plugin, collections)]
-
-extern crate glutin;
+﻿extern crate glutin;
 #[macro_use] extern crate glium;
 extern crate cgmath;
 extern crate libc;
@@ -28,7 +26,7 @@ fn main() {
         }
     };
     let display = builder
-        .with_title(string::String::from_str("Cube"))
+        .with_title(string::String::from("Cube"))
         .with_vsync()
         .with_gl_version((4, 1))
         .build_glium()
@@ -211,7 +209,7 @@ mod glium_oculus {
 mod basic_shader {
     extern crate glium;
 
-    #[derive(Copy)]
+    #[derive(Copy, Clone)]
     #[allow(non_snake_case)]
     struct Vertex {
         aPosition: [f32; 3],
