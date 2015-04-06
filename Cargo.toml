@@ -5,8 +5,9 @@ version = "0.0.1"
 description = "A VR headset library for Rust programs targeting the Oculus Rift."
 authors = ["Ryan Stewart <ryan@binsoftware.com>"]
 repository = "https://github.com/binsoftware/rovr"
+documentation = "http://binsoftware.github.io/rovr/doc/rovr"
 license = "MIT"
-keywords = ["vr", "ovr", "oculus", "headset", "virtual reality"]
+keywords = ["vr", "ovr", "oculus", "rift", "headset", "virtual", "reality"]
 
 [features]
 default = ["glutin"]
