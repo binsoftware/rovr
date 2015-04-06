@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["wgl","WGL bindings"],["wgl_extra","Functions that are not necessarly always available"]]});

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `RenderContext` struct in crate `rovr`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, RenderContext">
+
+    <title>rovr::render::RenderContext - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='../index.html'>rovr</a>::<wbr><a href='index.html'>render</a></p><script>window.sidebarCurrent = {name: 'RenderContext', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='../index.html'>rovr</a>::<wbr><a href='index.html'>render</a>::<wbr><a class='struct' href=''>RenderContext</a><wbr></span><span class='out-of-band'><span id='render-detail'>
+            <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
+        </span><a id='src-7251' href='../../src/rovr/shim.rs.html#292-301'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct RenderContext&lt;'a&gt; {
+    // some fields omitted
+}</pre><div class='docblock'><p>An active Oculus rendering context associated with an HMD. Only OpenGL is supported. This
+provides access to the basic metadata necessary to prepare OpenGL framebuffers for drawing.</p>
+
+<p>See <code>hmd.render_to()</code> for details on use.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><a class='stability Unmarked' title='No stability level'></a><code>impl&lt;'a&gt; <a class='struct' href='../../rovr/render/struct.RenderContext.html' title='rovr::render::RenderContext'>RenderContext</a>&lt;'a&gt;</code></h3><div class='impl-items'><h4 id='method.dismiss_hsw' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.dismiss_hsw' class='fnname'>dismiss_hsw</a>(&amp;self)</code></h4>
+<div class='docblock'><p>Dismiss the Health and Safety warning automatically displayed by the Oculus runtime. This
+should only be dismissed in response to user input; see the Oculus SDK documentation for
+details on proper usage.</p>
+</div><h4 id='method.recenter_pose' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.recenter_pose' class='fnname'>recenter_pose</a>(&amp;self)</code></h4>
+<div class='docblock'><p>Recenter the headset, using the current orientation and position as the origin.</p>
+</div><h4 id='method.target_texture_size' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.target_texture_size' class='fnname'>target_texture_size</a>(&amp;self, eye: &amp;<a class='enum' href='../../rovr/enum.Eye.html' title='rovr::Eye'>Eye</a>) -&gt; <a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(<a href='http://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a>, <a href='http://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a>)</a></code></h4>
+<div class='docblock'><p>Return a <code>(width, height)</code> tuple containing the suggested size for a render target for the
+given eye.</p>
+</div><h4 id='method.projection_matrix' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.projection_matrix' class='fnname'>projection_matrix</a>(&amp;self, eye: &amp;<a class='enum' href='../../rovr/enum.Eye.html' title='rovr::Eye'>Eye</a>, near_z: <a href='http://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>, far_z: <a href='http://doc.rust-lang.org/nightly/std/primitive.f32.html'>f32</a>) -&gt; <a class='type' href='../../rovr/render/type.Matrix4.html' title='rovr::render::Matrix4'>Matrix4</a></code></h4>
+<div class='docblock'><p>Create an appropriate projection matrix for the given eye. This will properly account for
+the native field of view of the associated headset. The returned matrix is a right-handed
+projection with an OpenGL clipping range (-w to w).</p>
+</div><h4 id='method.create_binding' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.create_binding' class='fnname'>create_binding</a>(&amp;self, tex_id_left: <a href='http://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a>, tex_id_right: <a href='http://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a>) -&gt; <a class='struct' href='../../rovr/render/struct.TextureBinding.html' title='rovr::render::TextureBinding'>TextureBinding</a></code></h4>
+<div class='docblock'><p>Create a texture binding given a pair of OpenGL texture IDs for the left and right eye,
+respectively. The left and right textures should be of the size suggested by
+<code>target_texture_size</code>.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><a class='stability Unmarked' title='No stability level'></a><code>impl&lt;'a&gt; CreateRenderContext&lt;'a&gt; for <a class='struct' href='../../rovr/render/struct.RenderContext.html' title='rovr::render::RenderContext'>RenderContext</a>&lt;'a&gt;</code></h3><div class='impl-items'><h4 id='method.new' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.new' class='fnname'>new</a>(owning_hmd: &amp;'a Hmd, target: &amp;'a <a class='trait' href='../../rovr/trait.RenderTarget.html' title='rovr::RenderTarget'>RenderTarget</a>) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='../../rovr/render/struct.RenderContext.html' title='rovr::render::RenderContext'>RenderContext</a>&lt;'a&gt;, <a class='enum' href='../../rovr/enum.OculusError.html' title='rovr::OculusError'>OculusError</a>&gt;</code></h4>
+<div class='docblock'><p>Create an active Oculus rendering context.</p>
+</div></div><h3 class='impl'><a class='stability Stable' title='Stable'></a><code>impl&lt;'a&gt; <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../../rovr/render/struct.RenderContext.html' title='rovr::render::RenderContext'>RenderContext</a>&lt;'a&gt;</code></h3><div class='impl-items'><h4 id='method.drop' class='method'><a class='stability Stable' title='Stable'></a><code>fn <a href='#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rovr";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>

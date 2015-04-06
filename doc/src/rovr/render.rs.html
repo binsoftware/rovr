@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `src\render.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>render.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content source"><pre class="line-numbers"><span id="1"> 1</span>
+<span id="2"> 2</span>
+<span id="3"> 3</span>
+<span id="4"> 4</span>
+<span id="5"> 5</span>
+<span id="6"> 6</span>
+<span id="7"> 7</span>
+<span id="8"> 8</span>
+<span id="9"> 9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+</pre><pre class='rust '>
+<span class='doccomment'>//! Methods for directly working with rendering.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # Example</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! End-to-end rendering looks something like this:</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! ```no_run</span>
+<span class='doccomment'>//! # extern crate rovr;</span>
+<span class='doccomment'>//! # extern crate libc;</span>
+<span class='doccomment'>//! # use rovr::{Context, TrackingOptions, Eye};</span>
+<span class='doccomment'>//! # use rovr::render::Frame;</span>
+<span class='doccomment'>//! # fn main() {</span>
+<span class='doccomment'>//! let hmd = Context::new().unwrap()</span>
+<span class='doccomment'>//!     .build_hmd()</span>
+<span class='doccomment'>//!     .track(&amp;TrackingOptions::with_all())</span>
+<span class='doccomment'>//!     .build().unwrap();</span>
+<span class='doccomment'>//! let (w, h) = hmd.resolution();</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! // &lt;create a window with an OpenGL context based on resolution&gt;</span>
+<span class='doccomment'>//! // &lt;create a render target; see rovr::target for details&gt;</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # struct EmptyRenderTarget;</span>
+<span class='doccomment'>//! # impl rovr::RenderTarget for EmptyRenderTarget {</span>
+<span class='doccomment'>//! #     fn get_multisample(&amp;self) -&gt; u32 { 0 }</span>
+<span class='doccomment'>//! #     unsafe fn get_native_window(&amp;self) -&gt; *const libc::c_void { std::ptr::null() }</span>
+<span class='doccomment'>//! # }</span>
+<span class='doccomment'>//! # let render_target = EmptyRenderTarget;</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! // This is unsafe because of the lifetime of native_window. If the window is closed before this</span>
+<span class='doccomment'>//! // render context is destroyed, bad things may happen!</span>
+<span class='doccomment'>//! let rc = hmd.render_to(&amp;render_target).unwrap();</span>
+<span class='doccomment'>//! let (w_left, h_left) = rc.target_texture_size(&amp;Eye::Left);</span>
+<span class='doccomment'>//! let (w_right, h_right) = rc.target_texture_size(&amp;Eye::Right);</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! // &lt;create framebuffers with backing textures with these dimensions&gt;</span>
+<span class='doccomment'>//! // &lt;grab their OpenGL ids&gt;</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! # let (left_tex_id, right_tex_id) = (0, 0);</span>
+<span class='doccomment'>//! let binding = rc.create_binding(left_tex_id, right_tex_id);</span>
+<span class='doccomment'>//! loop {</span>
+<span class='doccomment'>//!     let frame = Frame::new(&amp;rc, &amp;binding);</span>
+<span class='doccomment'>//!     // draw to framebuffers; frame will finish at end of loop body</span>
+<span class='doccomment'>//! }</span>
+<span class='doccomment'>//! # }</span>
+<span class='doccomment'>//! ```</span>
+
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>RenderContext</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>TextureBinding</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>Quaternion</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>Vector3</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>Matrix4</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>FrameEyePose</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>shim</span>::<span class='ident'>Frame</span>;
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "rovr";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>

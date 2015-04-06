@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `HmdBuilder` struct in crate `rovr`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, HmdBuilder">
+
+    <title>rovr::HmdBuilder - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='index.html'>rovr</a></p><script>window.sidebarCurrent = {name: 'HmdBuilder', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>rovr</a>::<wbr><a class='struct' href=''>HmdBuilder</a><wbr></span><span class='out-of-band'><span id='render-detail'>
+            <a id="collapse-all" href="#">[-]</a>&nbsp;<a id="expand-all" href="#">[+]</a>
+        </span><a id='src-8730' href='../src/rovr/lib.rs.html#130-135'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct HmdBuilder {
+    // some fields omitted
+}</pre><div class='docblock'><p>Builder to construct an HMD. Allows the configuration of HMD settings and tracking
+capabilities.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><a class='stability Unmarked' title='No stability level'></a><code>impl <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h3><div class='impl-items'><h4 id='method.no_mirror' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.no_mirror' class='fnname'>no_mirror</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Disables mirroring of HMD output to the attached window. This may improve
+rendering performance slightly.</p>
+</div><h4 id='method.no_display' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.no_display' class='fnname'>no_display</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Turns off HMD screen and output (only if the HMD is not in Direct display
+mode).</p>
+</div><h4 id='method.no_low_persistence' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.no_low_persistence' class='fnname'>no_low_persistence</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Disable low persistence.</p>
+</div><h4 id='method.no_dynamic_prediction' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.no_dynamic_prediction' class='fnname'>no_dynamic_prediction</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Disable dynamic adjustment of tracking prediction based on internally
+measured latency.</p>
+</div><h4 id='method.no_vsync' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.no_vsync' class='fnname'>no_vsync</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Disable VSync.</p>
+</div><h4 id='method.track' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.track' class='fnname'>track</a>&lt;'f&gt;(&amp;'f mut self, tracking_options: &amp;<a class='struct' href='../rovr/struct.TrackingOptions.html' title='rovr::TrackingOptions'>TrackingOptions</a>) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Enable tracking with the specified tracking options.</p>
+</div><h4 id='method.allow_debug' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.allow_debug' class='fnname'>allow_debug</a>&lt;'f&gt;(&amp;'f mut self) -&gt; &amp;'f mut <a class='struct' href='../rovr/struct.HmdBuilder.html' title='rovr::HmdBuilder'>HmdBuilder</a></code></h4>
+<div class='docblock'><p>Allow creation of a dummy &quot;debug&quot; HMD if no other HMD is found.</p>
+</div><h4 id='method.build' class='method'><a class='stability Unmarked' title='No stability level'></a><code>fn <a href='#method.build' class='fnname'>build</a>(&amp;self) -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='struct' href='../rovr/struct.Hmd.html' title='rovr::Hmd'>Hmd</a>, <a class='enum' href='../rovr/enum.OculusError.html' title='rovr::OculusError'>OculusError</a>&gt;</code></h4>
+<div class='docblock'><p>Build the HMD instance. This will begin tracking if tracking is enabled.</p>
+</div></div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "rovr";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script async src="../search-index.js"></script>
+</body>
+</html>
