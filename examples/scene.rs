@@ -73,15 +73,26 @@ fn display_loop<'a, F: Fn(&cgmath::Matrix4<f32>, &mut glium::framebuffer::Simple
     use cgmath::Matrix;
 
     let mut frame_index = 0u32;
+    let (proj_left, proj_right) = {
+        let projections: Vec<_> = [rovr::Eye::Left, rovr::Eye::Right].iter().map(|eye| {
+            attachments.get_render_context().projection_matrix(&eye, 0.2f32, 10f32)
+        }).collect();
+        (projections[0], projections[1])
+    };
     loop {
         {
             let frame = attachments.start_frame();
             for pose in frame.eye_poses() {
+                let projection = match pose.eye {
+                    rovr::Eye::Left => proj_left,
+                    rovr::Eye::Right => proj_right
+                };
                 let fixed = cgmath::Vector3::new(0f32, 1f32, 2f32);
-                let center = cgmath::Point3::new(0f32, 0f32, 0f32);
+                let direction = cgmath::Vector3::new(0f32, 0f32, -1f32);
                 let up = cgmath::Vector3::new(0f32, 1f32, 0f32);
 
                 let camera_position = fixed.add_v(cgmath::Vector3::from_fixed_ref(&pose.position));
+                let center = cgmath::Point3::from_vec(&camera_position.add_v(&direction));
 
                 let orientation_mat = {
                     let (orientation_s, ref orientation_v) = pose.orientation;
@@ -90,7 +101,7 @@ fn display_loop<'a, F: Fn(&cgmath::Matrix4<f32>, &mut glium::framebuffer::Simple
                         .to_matrix4()
                         .invert().unwrap()
                 };
-                let eye_transform = *cgmath::Matrix4::from_fixed_ref(&pose.projection_matrix) *
+                let eye_transform = *cgmath::Matrix4::from_fixed_ref(&projection) *
                     orientation_mat *
                     cgmath::Matrix4::look_at(&cgmath::Point::from_vec(&camera_position),
                                              &center,

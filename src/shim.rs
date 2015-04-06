@@ -17,6 +17,16 @@ use OculusError;
 use Eye;
 use RenderTarget;
 
+/// A quaternion. The first element of the tuple is the w value, and the array contains x, y, and z
+/// values.
+pub type Quaternion = (f32, [f32; 3]);
+
+/// A 3-dimensional vector, with (in order) x, y, and z components.
+pub type Vector3 = [f32; 3];
+
+/// A 4x4 matrix, by convention in column-major format.
+pub type Matrix4 = [[f32; 4]; 4];
+
 /// Invoke an FFI function with an ovrBool return value, yielding OculusError::SdkError with the
 /// supplied message on failure.
 macro_rules! ovr_invoke {
@@ -280,7 +290,9 @@ impl Drop for Hmd {
 /// 
 /// See `hmd.render_to()` for details on use.
 pub struct RenderContext<'a> {
-    metadata: RenderMetadata,
+    eye_texture_sizes: [ffi::ovrSizei; 2],
+    fovs: [ffi::ovrFovPort; 2],
+    offsets: [ffi::ovrVector3f; 2],
 
     owning_hmd: &'a Hmd,
 
@@ -332,7 +344,7 @@ impl<'a> CreateRenderContext<'a> for RenderContext<'a> {
            target: &'a RenderTarget) -> Result<RenderContext<'a>, OculusError> {
         let (w, h) = owning_hmd.resolution();
         let invoker = owning_hmd.context.invoker();
-        let metadata = unsafe {
+        let (offsets, fovs) = unsafe {
             let config = GlConfigBuilder::new(w, h, target.get_multisample() as i32)
                 .native_window(target.get_native_window())
                 .build();
@@ -354,13 +366,28 @@ impl<'a> CreateRenderContext<'a> for RenderContext<'a> {
                                                           ptr::null(), 
                                                           ptr::null()));
             }
-            RenderMetadata::new(&owning_hmd, &eye_render_desc[0], &eye_render_desc[1])
+            ([eye_render_desc[0].HmdToEyeViewOffset, eye_render_desc[1].HmdToEyeViewOffset],
+             [eye_render_desc[0].Fov, eye_render_desc[1].Fov])
         };
+        let mut eye_texture_sizes = (0..2).map(|eye_index| {
+            unsafe { 
+                let h = &*owning_hmd.native_hmd;
+                invoker.ovrHmd_GetFovTextureSize(owning_hmd.native_hmd, 
+                                                 eye_index, 
+                                                 h.MaxEyeFov[eye_index as usize], 
+                                                 1f32) 
+            }
+        });
 
         Ok(RenderContext {
+            eye_texture_sizes: [eye_texture_sizes.next().unwrap(), 
+                                eye_texture_sizes.next().unwrap()],
+            fovs: fovs,
+            offsets: offsets,
+
             owning_hmd: owning_hmd,
+
             _render_phantom: PhantomData,
-            metadata: metadata
         })
     }
 }
@@ -381,18 +408,42 @@ impl<'a> RenderContext<'a> {
     /// Return a `(width, height)` tuple containing the suggested size for a render target for the
     /// given eye.
     pub fn target_texture_size(&self, eye: &Eye) -> (u32, u32) {
-        match eye {
-            &Eye::Left => self.metadata.left.resolution(),
-            &Eye::Right => self.metadata.right.resolution()
-        }
+        let ref size = match eye {
+            &Eye::Left => self.eye_texture_sizes[0],
+            &Eye::Right => self.eye_texture_sizes[1]
+        };
+        (size.w as u32, size.h as u32)
+    }
+
+    /// Create an appropriate projection matrix for the given eye. This will properly account for
+    /// the native field of view of the associated headset. The returned matrix is a right-handed
+    /// projection with an OpenGL clipping range (-w to w).
+    pub fn projection_matrix(&self, eye: &Eye, near_z: f32, far_z: f32) -> Matrix4 {     
+        let invoker = self.owning_hmd.context.invoker();
+        let matrix = unsafe {
+            let ref fov = match eye {
+                &Eye::Left => self.fovs[0],
+                &Eye::Right => self.fovs[1]
+            };
+            let flags = 
+                ffi::ovrProjection_RightHanded |
+                ffi::ovrProjection_ClipRangeOpenGL;
+            invoker.ovrMatrix4f_Projection(*fov, near_z, far_z, flags)
+        };
+        let ref pm = matrix.M;
+        // ovr matrices are row-major, so we must invert
+        [[pm[0][0], pm[1][0], pm[2][0], pm[3][0]],
+         [pm[0][1], pm[1][1], pm[2][1], pm[3][1]],
+         [pm[0][2], pm[1][2], pm[2][2], pm[3][2]],
+         [pm[0][3], pm[1][3], pm[2][3], pm[3][3]]]
     }
 
     /// Create a texture binding given a pair of OpenGL texture IDs for the left and right eye,
     /// respectively. The left and right textures should be of the size suggested by
     /// `target_texture_size`.
     pub fn create_binding(&self, tex_id_left: u32, tex_id_right: u32) -> TextureBinding {
-        TextureBinding::new((self.metadata.left.texture_size, tex_id_left),
-                            (self.metadata.right.texture_size, tex_id_right))
+        TextureBinding::new((self.eye_texture_sizes[0], tex_id_left),
+                            (self.eye_texture_sizes[1], tex_id_right))
     }
 }
 
@@ -408,58 +459,6 @@ impl<'a> Drop for RenderContext<'a> {
                                                           &hmd_data.MaxEyeFov,
                                                           &mut eye_render_desc));
         }
-    }
-}
-
-/// Metadata describing the desired rendering parameters for both eyes.
-struct RenderMetadata {
-    left: PerEyeRenderMetadata,
-    right: PerEyeRenderMetadata,
-    offsets: [ffi::ovrVector3f; 2]
-}
-
-impl RenderMetadata {
-    fn new(hmd: &Hmd,
-           left: &ffi::ovrEyeRenderDesc,
-           right: &ffi::ovrEyeRenderDesc) -> RenderMetadata {
-        let h = unsafe {
-            &*hmd.native_hmd
-        };
-        RenderMetadata {
-            left: PerEyeRenderMetadata::new(hmd, left, 0, h.MaxEyeFov[0]),
-            right: PerEyeRenderMetadata::new(hmd, right, 1, h.MaxEyeFov[1]),
-            offsets: [left.HmdToEyeViewOffset, right.HmdToEyeViewOffset]
-        }
-    }
-}
-
-struct PerEyeRenderMetadata {
-    texture_size: ffi::ovrSizei,
-    projection: ffi::ovrMatrix4f
-}
-
-impl PerEyeRenderMetadata {
-    fn new(hmd: &Hmd, 
-           render_desc: &ffi::ovrEyeRenderDesc, 
-           eye_index: i32,
-           fov: ffi::ovrFovPort) -> PerEyeRenderMetadata {
-        unsafe {
-            let invoker = hmd.context.invoker();
-            PerEyeRenderMetadata {
-                texture_size: invoker.ovrHmd_GetFovTextureSize(hmd.native_hmd, 
-                                                               eye_index, 
-                                                               fov, 
-                                                               1f32),
-                projection: invoker.ovrMatrix4f_Projection(render_desc.Fov, 
-                                                           0.2f32, 
-                                                           100f32, 
-                                                           ffi::ovrTrue)
-            }
-        }
-    }
-
-    fn resolution(&self) -> (u32, u32) {
-        (self.texture_size.w as u32, self.texture_size.h as u32)
     }
 }
 
@@ -493,23 +492,12 @@ impl TextureBinding {
 
 }
 
-/// A quaternion. The first element of the tuple is the w value, and the array contains x, y, and z
-/// values.
-pub type Quaternion = (f32, [f32; 3]);
-
-/// A 3-dimensional vector, with (in order) x, y, and z components.
-pub type Vector3 = [f32; 3];
-
-/// A 4x4 matrix, by convention in column-major format.
-pub type Matrix4 = [[f32; 4]; 4];
-
 /// A single eye's pose for a frame.
 #[derive(Clone, Copy)]
 pub struct FrameEyePose {
     pub eye: Eye,
     pub orientation: Quaternion,
     pub position: Vector3,
-    pub projection_matrix: Matrix4
 }
 
 /// A single frame. All OpenGL rendering to both eyes' frame buffers should happen while this
@@ -531,7 +519,7 @@ impl<'a> Frame<'a> {
             invoker.ovrHmd_BeginFrame(owning_context.owning_hmd.native_hmd, 0);
             invoker.ovrHmd_GetEyePoses(owning_context.owning_hmd.native_hmd,
                                        0,
-                                       &owning_context.metadata.offsets,
+                                       &owning_context.offsets,
                                        &mut poses,
                                        ptr::null_mut());
         }
@@ -550,9 +538,9 @@ impl<'a> Frame<'a> {
             let ref hmd_struct = *self.owning_context.owning_hmd.native_hmd;
             let mut poses = Vec::<FrameEyePose>::with_capacity(2);
             for i in hmd_struct.EyeRenderOrder.iter() {
-                let (eye, ref pm) = match i {
-                    &0u32 => (Eye::Left, self.owning_context.metadata.left.projection.M),
-                    &1u32 => (Eye::Right, self.owning_context.metadata.right.projection.M),
+                let eye = match i {
+                    &0u32 => Eye::Left,
+                    &1u32 => Eye::Right,
                     _ => panic!("Too many eyes!")
                 };
                 let position = self.poses[*i as usize].Position;
@@ -562,11 +550,7 @@ impl<'a> Frame<'a> {
                 poses.push(FrameEyePose {
                     eye: eye,
                     orientation: (orientation.w, [orientation.x, orientation.y, orientation.z]),
-                    position: [position.x, position.y, position.z],
-                    projection_matrix: [[pm[0][0], pm[1][0], pm[2][0], pm[3][0]],
-                                        [pm[0][1], pm[1][1], pm[2][1], pm[3][1]],
-                                        [pm[0][2], pm[1][2], pm[2][2], pm[3][2]],
-                                        [pm[0][3], pm[1][3], pm[2][3], pm[3][3]]]
+                    position: [position.x, position.y, position.z]
                 });
             }
             poses.into_iter()

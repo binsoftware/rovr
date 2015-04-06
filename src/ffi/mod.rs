@@ -347,6 +347,18 @@ macro_rules! function_table {
     };
 }
 
+bitflags!(
+    #[repr(C)]
+    #[derive(Default)]
+    flags ovrProjectionModifier: u32 {
+        const ovrProjection_None = 0x00,
+        const ovrProjection_RightHanded = 0x01,
+        const ovrProjection_FarLessThanNear = 0x02,
+        const ovrProjection_FarClipAtInfinity = 0x04,
+        const ovrProjection_ClipRangeOpenGL = 0x08
+    }
+);
+
 function_table!(
     fn ovr_Initialize(params: *const ovrInitParams) -> ovrBool,
     fn ovr_Shutdown() -> (),
@@ -388,6 +400,6 @@ function_table!(
     fn ovrMatrix4f_Projection(fov: ovrFovPort, 
                               znear: f32, 
                               zfar: f32, 
-                              rightHanded: ovrBool) -> ovrMatrix4f
+                              projectionModFlags: ovrProjectionModifier) -> ovrMatrix4f
 );
 
