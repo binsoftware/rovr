@@ -5,7 +5,7 @@ extern crate libc;
 extern crate rovr;
 
 use std::string;
-use cgmath::{ToMatrix4, Matrix, Point, FixedArray, Vector};
+use cgmath::{Matrix, Point, FixedArray, Vector};
 
 fn main() {
     use glium::DisplayBuild;
@@ -28,7 +28,7 @@ fn main() {
     let display = builder
         .with_title(string::String::from("Cube"))
         .with_vsync()
-        .with_gl_version((4, 1))
+        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (4, 1)))
         .build_glium()
         .ok().expect("Unable to build Window");
 
@@ -95,12 +95,14 @@ fn display_loop<'a, F: Fn(&cgmath::Matrix4<f32>, &mut glium::framebuffer::Simple
                 let center = cgmath::Point3::from_vec(&camera_position.add_v(&direction));
 
                 let orientation_mat = {
-                    let (orientation_s, ref orientation_v) = pose.orientation;
-                    cgmath::Quaternion::from_sv(orientation_s,
-                                                *cgmath::Vector3::from_fixed_ref(orientation_v))
-                        .to_matrix4()
-                        .invert().unwrap()
+                    let mat: cgmath::Matrix4<_> = {
+                        let (orientation_s, ref orientation_v) = pose.orientation;
+                        cgmath::Quaternion::from_sv(orientation_s,
+                            *cgmath::Vector3::from_fixed_ref(orientation_v))
+                    }.into();
+                    mat.invert().unwrap()
                 };
+
                 let eye_transform = *cgmath::Matrix4::from_fixed_ref(&projection) *
                     orientation_mat *
                     cgmath::Matrix4::look_at(&cgmath::Point::from_vec(&camera_position),
