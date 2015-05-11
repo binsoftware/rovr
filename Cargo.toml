@@ -1,7 +1,7 @@
 [package]
 
 name = "rovr"
-version = "0.0.1"
+version = "0.0.2"
 description = "A VR headset library for Rust programs targeting the Oculus Rift."
 authors = ["Ryan Stewart <ryan@binsoftware.com>"]
 repository = "https://github.com/binsoftware/rovr"
@@ -34,5 +34,4 @@ default-features = false
 features = ["gl_read_buffer", "gl_depth_textures"]
 
 [dev-dependencies.cgmath]
-version = "^0.1"
-git = "https://github.com/bjz/cgmath-rs"
+version = "^0.2"
