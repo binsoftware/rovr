@@ -207,12 +207,14 @@ mod dl {
 mod dl {
     use std::ffi::OsStr;
     use std::option::Option::{self, Some, None};
+    use std::os::windows::ffi::OsStrExt;
     use std::ptr;
     use std::result::Result;
     use std::result::Result::{Ok, Err};
     use std::string::String;
     use std::vec::Vec;
-    use libc;
+    use winapi::*;
+    use kernel32::*;
 
     pub fn open(filename: Option<&OsStr>) -> Result<*mut u8, String> {
         unsafe {
@@ -224,7 +226,7 @@ mod dl {
                 let filename_str: Vec<_> =
                     to_wide(filename);
                 let result = unsafe {
-                    LoadLibraryW(filename_str.as_ptr() as *const libc::c_void)
+                    LoadLibraryW(filename_str.as_ptr())
                 };
                 // beware: Vec/String may change errno during drop!
                 // so we get error here.
@@ -237,10 +239,10 @@ mod dl {
             None => {
                 let mut handle = ptr::null_mut();
                 let succeeded = unsafe {
-                    GetModuleHandleExW(0 as libc::DWORD, ptr::null(), &mut handle)
+                    GetModuleHandleExW(0, ptr::null(), &mut handle)
                 };
-                if succeeded == libc::FALSE {
-                    Err(String::from("GetModuleHnadlEx failed"))
+                if succeeded == FALSE {
+                    Err(String::from("GetModuleHandleExW failed"))
                 } else {
                     Ok(handle as *mut u8)
                 }
@@ -266,54 +268,18 @@ mod dl {
         }
     }
 
-    pub unsafe fn symbol(handle: *mut u8, symbol: *const libc::c_char) -> *mut u8 {
-        GetProcAddress(handle as *mut libc::c_void, symbol) as *mut u8
+    pub unsafe fn symbol(handle: *mut u8, symbol: LPCSTR) -> *mut u8 {
+        GetProcAddress(handle as HMODULE, symbol) as *mut u8
     }
     pub unsafe fn close(handle: *mut u8) {
-        FreeLibrary(handle as *mut libc::c_void); ()
+        FreeLibrary(handle as HMODULE); ()
     }
 
-    pub unsafe fn errno() -> i32 {
-        libc::GetLastError() as i32
+    pub unsafe fn errno() -> u32 {
+        GetLastError()
     }
 
     pub fn to_wide(s: &OsStr) -> Vec<u16> {
-        use kernel32::MultiByteToWideChar;
-        use winapi::winnls::CP_UTF8;
-
-        match s.to_str() {
-            Some(s) => {
-                let len = s.len() as i32;
-                unsafe {
-                    let buf = MultiByteToWideChar(CP_UTF8, 
-                                                  0, 
-                                                  s.as_ptr() as *const i8, 
-                                                  len, 
-                                                  ptr::null_mut(), 
-                                                  0);
-                    let mut vec: Vec<u16> = Vec::with_capacity(buf as usize);
-                    MultiByteToWideChar(CP_UTF8, 
-                                        0, 
-                                        s.as_ptr() as *const i8,
-                                        len, 
-                                        vec.as_mut_ptr(),
-                                        buf);
-                    vec
-                }
-            }
-            None => Vec::new()
-        }
-    }
-
-    #[allow(non_snake_case)]
-    extern "system" {
-        fn SetLastError(error: libc::size_t);
-        fn LoadLibraryW(name: *const libc::c_void) -> *mut libc::c_void;
-        fn GetModuleHandleExW(dwFlags: libc::DWORD, name: *const u16,
-                              handle: *mut *mut libc::c_void) -> libc::BOOL;
-        fn GetProcAddress(handle: *mut libc::c_void,
-                          name: *const libc::c_char) -> *mut libc::c_void;
-        fn FreeLibrary(handle: *mut libc::c_void);
-        fn SetErrorMode(uMode: libc::c_uint) -> libc::c_uint;
+        s.encode_wide().collect()
     }
 }
