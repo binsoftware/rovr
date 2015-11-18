@@ -36,7 +36,10 @@ pub enum OculusError {
 
     /// Only one `Context` can be active at a time per process. This error occurs when attempting to
     /// create a second `Context` while a `Context` is already active.
-    DuplicateContext
+    DuplicateContext,
+
+    /// No Oculus-supported headset was detected.
+    NoHeadset
 }
 
 impl fmt::Display for OculusError {

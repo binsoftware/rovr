@@ -1,9 +1,5 @@
 #![allow(dead_code, non_upper_case_globals, non_camel_case_types, non_snake_case)]
 
-type ovrBool = u8;
-pub const ovrTrue: u8 = 1;
-pub const ovrFalse: u8 = 0;
-
 mod dynamic_lib;
 
 use libc;
@@ -12,6 +8,44 @@ use std::mem;
 use std::ptr;
 
 pub use ffi::dynamic_lib::UnsafeDynamicLibrary;
+
+pub type ovrBool = u8;
+pub const ovrFalse: ovrBool = 0;
+pub const ovrTrue: ovrBool = 1;
+
+pub type ovrResult = i32;
+pub const ovrSuccess: ovrResult = 0;
+pub const ovrSuccess_NotVisible: ovrResult = 1000;
+pub const ovrSuccess_HMDFirmwareMismatch: ovrResult = 4100;
+pub const ovrSuccess_TrackerFirmwareMismatch: ovrResult = 4101;
+pub const ovrSuccess_ControllerFirmwareMismatch: ovrResult = 4104;
+pub fn ovrSuccess(r: ovrResult) -> bool {
+    return r > 0;
+}
+pub fn ovrUnqualifiedSuccess(r: ovrResult) -> bool {
+    return r == ovrSuccess;
+}
+pub fn ovrFailure(r: ovrResult) -> bool {
+    return !ovrSuccess(r);
+}
+
+#[repr(C)]
+pub struct ovrHmdStruct;
+pub type ovrSession = *mut ovrHmdStruct;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrPoseStatef {
+    pub ThePose: ovrPosef,
+    pub AngularVelocity: ovrVector3f,
+    pub LinearVelocity: ovrVector3f,
+    pub AngularAcceleartion: ovrVector3f,
+    pub LinearAcceleration: ovrVector3f,
+
+    pub _PAD0_: [u8; 4],
+
+    pub TimeInSeconds: f64
+}
 
 #[repr(C)]
 #[derive(Default, Clone, Copy)]
@@ -96,9 +130,7 @@ bitflags!(
     #[derive(Default)]
     flags ovrInitFlags: u32 {
         const ovrInit_Debug = 0x00000001,
-        const ovrInit_ServerOptional = 0x00000002,
-        const ovrInit_RequestVersion = 0x00000004,
-        const ovrInit_ForceNoDebug = 0x00000008
+        const ovrInit_RequestVersion = 0x00000004
     }
 );
 
@@ -107,7 +139,11 @@ pub struct ovrInitParams {
     Flags: u32,
     RequestedMinorVersion: u32,
     LogCallback: *const libc::c_void,
-    ConnectionTimeoutMS: u32
+    UserData: usize,
+    ConnectionTimeoutMS: u32,
+
+    #[cfg(target_pointer_width = "64")]
+    pub _PAD0_: [u8; 4]
 }
 
 impl Default for ovrInitParams {
@@ -116,35 +152,37 @@ impl Default for ovrInitParams {
             Flags: Default::default(),
             RequestedMinorVersion: Default::default(),
             LogCallback: ptr::null(),
+            UserData: Default::default(),
             ConnectionTimeoutMS: Default::default()
         }
     }
 }
 
-pub type ovrHmdType = u32;
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrDetectResult {
+    pub IsOculusServiceRunning: ovrBool,
+    pub IsOculusHMDConnected: ovrBool
+}
+
+pub type ovrHmdType = i32;
 pub const ovrHmd_None: ovrHmdType = 0;
 pub const ovrHmd_DK1: ovrHmdType = 3;
 pub const ovrHmd_DKHD: ovrHmdType = 4;
 pub const ovrHmd_DK2: ovrHmdType = 6;
-pub const ovrHmd_BlackStar: ovrHmdType = 7;
 pub const ovrHmd_CB: ovrHmdType = 8;
 pub const ovrHmd_Other: ovrHmdType = 9;
+pub const ovrHmd_E3_2015: ovrHmdType = 10;
+pub const ovrHmd_ES06: ovrHmdType = 11;
+pub const ovrHmd_ES09: ovrHmdType = 12;
 
 bitflags!(
     #[repr(C)]
     #[derive(Default)]
     flags ovrHmdCaps: u32 {
-        const ovrHmdCap_Present = 0x0001,
-        const ovrHmdCap_Available = 0x0002,
-        const ovrHmdCap_Captured = 0x0004,
-        const ovrHmdCap_ExtendDesktop = 0x0008,
-        const ovrHmdCap_NoMirrorToWindow = 0x2000,
-        const ovrHmdCap_DisplayOff = 0x0040,
-        const ovrHmdCap_LowPersistence = 0x0080,
-        const ovrHmdCap_DynamicPrediction = 0x0200,
-        const ovrHmdCap_NoVSync = 0x1000,
-        const ovrHmdCap_Writable_Mask = 0x32C0,
-        const ovrHmdCap_Service_Mask = 0x22C0
+        const ovrHmdCap_DebugDevice = 0x0010
+        const ovrHmdCap_Writable_Mask = 0x0000,
+        const ovrHmdCap_Service_Mask = 0x0000
     }
 );
 
@@ -159,33 +197,15 @@ bitflags!(
     }
 );
 
-bitflags!(
-    #[repr(C)]
-    #[derive(Default)]
-    flags ovrDistortionCaps: u32 {
-        const ovrDistortionCap_TimeWarp = 0x02,
-        const ovrDistortionCap_Vignette = 0x08,
-        const ovrDistortionCap_NoRestore = 0x10,
-        const ovrDistortionCap_FlipInput = 0x20,
-        const ovrDistortionCap_SRGB = 0x40,
-        const ovrDistortionCap_Overdrive = 0x80,
-        const ovrDistortionCap_HqDistortion = 0x100,
-        const ovrDistortionCap_LinuxDevFullscreen = 0x200,
-        const ovrDistortionCap_ComputeShader = 0x400,
-        const ovrDistortionCap_TimewarpJitDelay = 0x1000,
-        const ovrDistortionCap_ProfileNoSpinWaits = 0x10000
-    }
-);
-
-#[repr(C)] 
-pub struct ovrHmdStruct;
-
 #[repr(C)]
 pub struct ovrHmdDesc {
-    pub Handle: *mut ovrHmdStruct,
     pub Type: ovrHmdType,
-    pub ProductName: *const u8,
-    pub Manufacturer: *const u8,
+
+    #[cfg(target_pointer_width = "64")]
+    pub _PAD0_: [u8; 4],
+
+    pub ProductName: [u8; 64],
+    pub Manufacturer: [u8; 64],
     pub VendorId: i16,
     pub ProductId: i16,
     pub SerialNumber: [u8; 24],
@@ -195,61 +215,37 @@ pub struct ovrHmdDesc {
     pub CameraFrustumVFovInRadians: f32,
     pub CameraFrustumNearZInMeters: f32,
     pub CameraFrustumFarZInMeters: f32,
-    pub HmdCaps: ovrHmdCaps,
-    pub TrackingCaps: ovrTrackingCaps,
-    pub DistortionCaps: ovrDistortionCaps,
+    pub AvailableHmdCaps: ovrHmdCaps,
+    pub DefaultHmdCaps: ovrHmdCaps,
+    pub AvailableTrackingCaps: ovrTrackingCaps,
+    pub DefaultTrackingCaps: ovrTrackingCaps,
     pub DefaultEyeFov: [ovrFovPort; 2],
     pub MaxEyeFov: [ovrFovPort; 2],
-    pub EyeRenderOrder: [u32; 2],
     pub Resolution: ovrSizei,
-    pub WindowsPos: ovrVector2i,
-    pub DisplayDeviceName: *const i8,
-    pub DisplayId: i32
+    pub DisplayRefreshRate: f32,
+
+    #[cfg(target_pointer_width = "64")]
+    pub _PAD1_: [u8; 4]
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrGraphicsLuid {
+    Reserved: [u8; 8]
 }
 
 pub type ovrRenderAPIType = u32;
 pub const ovrRenderAPI_None: ovrRenderAPIType = 0;
 pub const ovrRenderAPI_OpenGL: ovrRenderAPIType = 1;
 pub const ovrRenderAPI_Android_GLES: ovrRenderAPIType = 2;
-pub const ovrRenderAPI_D3D9: ovrRenderAPIType = 3;
-pub const ovrRenderAPI_D3D10: ovrRenderAPIType = 4;
 pub const ovrRenderAPI_D3D11: ovrRenderAPIType = 5;
-pub const ovrRenderAPI_Count: ovrRenderAPIType = 6;
-
-#[repr(C)]
-#[cfg(target_os = "linux")]
-pub struct _XDisplay;
+pub const ovrRenderAPI_Count: ovrRenderAPIType = 4;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-#[allow(raw_pointer_derive)]
-pub struct ovrGLConfig {
-    pub API: ovrRenderAPIType,
-    pub BackBufferSize: ovrSizei,
-    pub Multisample: i32,
-
-    #[cfg(windows)]
-    pub Window: *const libc::c_void,
-    #[cfg(windows)]
-    pub HDC: *const libc::c_void,
-    #[cfg(windows)]
-    pub _PAD_: [usize; 6],
-
-    #[cfg(target_os = "linux")]
-    pub Disp: *const _XDisplay,
-    #[cfg(target_os = "linux")]
-    pub _PAD_: [usize; 7],
-
-    #[cfg(all(not(windows), not(target_os = "linux")))]
-    pub _PAD_: [usize; 8],
-}
-
-impl Default for ovrGLConfig {
-    fn default() -> ovrGLConfig {
-        unsafe {
-            mem::zeroed()
-        }
-    }
+pub struct ovrTextureHeader {
+    API: ovrRenderAPIType,
+    TextureSize: ovrSizei
 }
 
 // We're representing the GL-specific half of the union ovrGLTexture (specifically,
@@ -264,10 +260,7 @@ impl Default for ovrGLConfig {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ovrGLTexture {
-    pub API: ovrRenderAPIType,
-    pub TextureSize: ovrSizei,
-    pub RenderViewport: ovrRecti,
-
+    pub Header: ovrTextureHeader,
     pub TexId: u32,
 
     // See above notes about alignment.
@@ -286,6 +279,14 @@ impl Default for ovrGLTexture {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrSwapTextureSet {
+    pub Textures: *const ovrTexture,
+    pub TextureCount: i32,
+    pub CurrentIndex: i32
+}
+
+#[repr(C)]
 #[derive(Default, Clone, Copy)]
 pub struct ovrEyeRenderDesc {
     pub Eye: u32,
@@ -297,15 +298,73 @@ pub struct ovrEyeRenderDesc {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct ovrFrameTiming {
-    pub DeltaSeconds: f32,
-    pub Pad: f32,
-    pub ThisFrameSeconds: f64,
-    pub TimewarpPointSeconds: f64,
-    pub NextFrameSeconds: f64,
-    pub ScanoutMidpointSeconds: f64,
-    pub EyeScanoutSeconds: [f64; 2]
+pub struct ovrTrackingState {
+    pub HeadPose: ovrPoseStatef,
+    pub CameraPose: ovrPosef,
+    pub LeveledCamearPose: ovrPosef,
+    pub HandPoses: [ovrPoseStatef; 2],
+    pub RawSensorData: ovrSensorData,
+    pub StatusFlags: u32,
+    pub HandStatusFlags: [u32; 2],
+    pub LastCameraFrameCounter: u32,
+
+    pub _PAD0_: [u8; 4]
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrViewScaleDesc {
+    pub HmdToEyeViewOffset: [ovrVector3f; 2],
+    pub HmdSpaceToWorldScaleInMeters: f32
+}
+
+pub type ovrLayerType = i32;
+pub const ovrLayerType_Disabled: ovrLayerType = 0;
+pub const ovrLayerType_EyeFov: ovrLayerType = 1;
+pub const ovrLayerType_EyeFovDepth: ovrLayerType = 2;
+pub const ovrLayerType_Quad: ovrLayerType = 3;
+pub const ovrLayerType_EyeMatrix: ovrLayerType = 5;
+pub const ovrLayerType_Direct: ovrLayerType = 6;
+
+bitflags!(
+    #[repr(C)]
+    #[derive(Default)]
+    flags ovrLayerFlags: u32 {
+        ovrLayerFlag_HighQuality = 0x01,
+        ovrLayerFlag_TextureOriginAtBottomLeft = 0x02,
+        ovrLayerFlag_HeadLocked = 0x04
+    }
+);
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrLayerHeader {
+    pub Type: ovrLayerType,
+    pub Flags: ovrLayerFlags
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ovrLayerEyeFov {
+    pub Header: ovrLayerHeader,
+    pub ColorTexture: [*const ovrSwapTextureSet; 2],
+    pub Viewport: [ovrRecti; 2],
+    pub Fov: [ovrFovPort; 2],
+    pub RenderPose: [overPosef; 2],
+    pub SensorSampleTime: f64
+}
+
+bitflags!(
+    #[repr(C)]
+    #[derive(Default)]
+    flags ovrProjectionModifier: u32 {
+        const ovrProjection_None = 0x00,
+        const ovrProjection_RightHanded = 0x01,
+        const ovrProjection_FarLessTHanNear = 0x02,
+        const ovrProjection_FarClipAtInfinity = 0x04,
+        const ovrProjection_ClipRangeOpenGL = 0x08
+    }
+);
 
 macro_rules! function_table {
     ( $( fn $func_name:ident( $( $param_name:ident: $param_type:ty ),* ) -> $ret_type:ty ),+ ) => {
@@ -347,55 +406,59 @@ macro_rules! function_table {
     };
 }
 
-bitflags!(
-    #[repr(C)]
-    #[derive(Default)]
-    flags ovrProjectionModifier: u32 {
-        const ovrProjection_None = 0x00,
-        const ovrProjection_RightHanded = 0x01,
-        const ovrProjection_FarLessThanNear = 0x02,
-        const ovrProjection_FarClipAtInfinity = 0x04,
-        const ovrProjection_ClipRangeOpenGL = 0x08
-    }
-);
-
 function_table!(
-    fn ovr_Initialize(params: *const ovrInitParams) -> ovrBool,
+    fn ovr_Detect(timeoutMsec: i32) -> ovrDetectResult,
+
+    fn ovr_Initialize(params: *const ovrInitParams) -> ovrResult,
     fn ovr_Shutdown() -> (),
 
-    fn ovrHmd_Create(index: i32) -> *mut ovrHmdDesc,
-    fn ovrHmd_CreateDebug(the_type: ovrHmdType) -> *mut ovrHmdDesc,
-    fn ovrHmd_Destroy(hmd: *mut ovrHmdDesc) -> (),
+    fn ovr_Create(pSession: *mut ovrSession, pLuid: *mut ovrGraphicsLuid) -> ovrResult,
+    fn ovr_Destroy(session: ovrSession) -> (),
 
-    fn ovrHmd_SetEnabledCaps(hmd: *mut ovrHmdDesc, hmdCaps: ovrHmdCaps) -> (),
-    fn ovrHmd_DismissHSWDisplay(hmd: *mut ovrHmdDesc) -> ovrBool,
-    fn ovrHmd_RecenterPose(hmd: *mut ovrHmdDesc) -> (),
-    fn ovrHmd_ConfigureTracking(hmd: *mut ovrHmdDesc, 
-                                supportedTrackingCaps: ovrTrackingCaps, 
-                                requiredTrackingCaps: ovrTrackingCaps) -> ovrBool,
-    fn ovrHmd_ConfigureRendering(hmd: *mut ovrHmdDesc, 
-                                 apiConfig: *const ovrGLConfig, 
-                                 distortionCaps: ovrDistortionCaps, 
-                                 eyeFovIn: *const [ovrFovPort; 2], 
-                                 eyeRenderDescOut: *mut [ovrEyeRenderDesc; 2]) -> ovrBool,
-    fn ovrHmd_AttachToWindow(hmd: *mut ovrHmdDesc,
-                             window: *const libc::c_void,
-                             destMirrorRect: *const ovrRecti,
-                             sourceRenderTargetRect: *const ovrRecti) -> ovrBool,
-    fn ovrHmd_GetFovTextureSize(hmd: *mut ovrHmdDesc, 
-                                eye: i32, 
-                                fov: ovrFovPort, 
-                                pixelsPerDisplayPixel: f32) -> ovrSizei,
+    fn ovr_GetHmdDesc(session: ovrSession) -> ovrHmdDesc,
 
-    fn ovrHmd_BeginFrame(hmd: *mut ovrHmdDesc, frameIndex: u32) -> ovrFrameTiming,
-    fn ovrHmd_GetEyePoses(hmd: *mut ovrHmdDesc, 
-                          frameIndex: u32, 
-                          hmdToEyeViewOffset: *const [ovrVector3f; 2], 
-                          outEyePoses: *mut [ovrPosef; 2], 
-                          outHmdTrackingState: *mut libc::c_void) -> (),
-    fn ovrHmd_EndFrame(hmd: *mut ovrHmdDesc, 
-                       renderPose: *const [ovrPosef; 2], 
-                       eyeTexture: *const [ovrGLTexture; 2]) -> (),
+    fn ovr_ConfigureTracking(session: ovrSession, 
+                             supportedTrackingCaps: ovrTrackingCaps, 
+                             requiredTrackingCaps: ovrTrackingCaps) -> ovrResult,
+    fn ovr_RecenterPose(session: ovrSession) -> (),
+
+    fn ovr_GetFovTextureSize(session: ovrSession, 
+                             eye: i32, 
+                             fov: ovrFovPort, 
+                             pixelsPerDisplayPixel: f32) -> ovrSizei,
+    fn ovr_GetRenderDesc(session: ovrSession,
+                         eye: i32,
+                         fov: ovrFovPort) -> ovrEyeRenderDesc,
+
+    fn ovr_CreateMirrorTextureGL(session: ovrSession,
+                                 format: GLuint,
+                                 width: i32,
+                                 height: i32,
+                                 outMirrorTexture: *mut *mut ovrTexture) -> ovrResult,
+    fn ovr_DestroyMirrorTexture(session: ovrSession,
+                                mirrorTexture: *ovrTexture) -> (),
+
+    fn ovr_CreateSwapTextureSetGL(session: ovrSession,
+                                  format: GLuint,
+                                  width: i32,
+                                  height: i32,
+                                  outTextureSet: *mut *mut ovrSwapTextureSet) -> ovrResult,
+    fn ovr_DestroySwapTextureSet(session: ovrSession,
+                                 textureSet: *const ovrSwapTextureSet) -> (),
+
+    fn ovr_GetPredictedDisplayTime(session: ovrSession,
+                                   frameIndex: i64) -> f64,
+    fn ovr_GetTrackingState(session: ovrSession,
+                            absTime: f64,
+                            latencyMarker: ovrBool) -> ovrTrackingState,
+    fn ovr_CalcEyePoses(headPose: ovrPosef,
+                        hmdToEyeViewOffset: [ovrVector3f; 2],
+                        outEyePoses: mut [ovrPosef; 2]) -> (),
+    fn ovr_SubmitFrame(session: ovrSession,
+                       frameIndex: i64,
+                       viewScaleDesc: *const ovrViewScaleDesc,
+                       layerPtrList: *const *const ovrLayerHeader,
+                       layerCount: u32) -> ovrResult,
 
     fn ovrMatrix4f_Projection(fov: ovrFovPort, 
                               znear: f32, 

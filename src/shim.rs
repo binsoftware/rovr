@@ -11,6 +11,7 @@ use std::sync::atomic;
 use std::vec;
 
 use libc;
+use gl;
 
 use ffi;
 use OculusError;
@@ -31,7 +32,7 @@ pub type Matrix4 = [[f32; 4]; 4];
 /// supplied message on failure.
 macro_rules! ovr_invoke {
     ($x:expr) => {
-        if $x == ffi::ovrFalse {
+        if ovrFailure($x) {
             return Err(OculusError::SdkError("$x failed"));
         }
     }
@@ -40,7 +41,7 @@ macro_rules! ovr_invoke {
 /// Invoke an FFI function with an ovrBool return value, and panic on failure.
 macro_rules! ovr_expect {
     ($x:expr) => {
-        if $x == ffi::ovrFalse {
+        if ovrFailure($x) {
             panic!("$x failed");
         }
     }
@@ -137,85 +138,49 @@ impl Drop for Context {
     }
 }
 
-/// Platform-specific identifier for the OS display representing an Hmd.
-#[allow(dead_code)] // Per-platform, only one of these enum values is used.
-#[derive(Debug, Eq, PartialEq)]
-pub enum HmdDisplayId {
-    /// On OS X, this value is the display ID as it would be returned from
-    /// `CGGetActiveDisplayList`.
-    Numeric(u32),
-
-    /// On Windows, this value is the device name as would be reported by `EnumDisplayDevices`.
-    Name(String),
-
-    /// On other platforms, a native identifier for this monitor is not reported by the SDK.
-    Unavailable
-}
-
-/// Full details about the system display representing this Hmd. These should be used to find the
-/// correct monitor on which to prepare a rendering window.
-pub struct HmdDisplay {
-    /// Identifier for this monitor, if available.
-    pub id: HmdDisplayId,
-
-    /// Left edge of the display region.
-    pub x: i32,
-
-    /// Top edge of the display region.
-    pub y: i32,
-
-    /// Width of the display region.
-    pub width: u32,
-
-    /// Height of the display region.
-    pub height: u32
-}
-
 /// RAII wrapper for an Oculus headset. Provides safe wrappers for access to basic headset
 /// metadata and tracking state.
-pub struct Hmd {
-    native_hmd: *mut ffi::ovrHmdDesc,
+pub struct Session {
+    session: ffi::ovrSession,
+    eye_offsets: 
     context: Rc<Context>
 }
 
-impl Hmd {
-    /// Create a new HMD. If `allow_debug` is true and no headset is otherwise detected, a fake
+impl Session {
+    /// Create a new HMD. If `require_headset` is false and no headset is otherwise detected, a fake
     /// "debug" HMD instance will be returned instead.
-    pub fn new(allow_debug: bool, owning_context: Rc<Context>) -> Result<Hmd, OculusError> {
-        let hmd = {
-            unsafe {
-                let h = owning_context.invoker().ovrHmd_Create(0);
-                if h.is_null() && allow_debug { 
-                    owning_context.invoker().ovrHmd_CreateDebug(ffi::ovrHmd_DK2) 
-                } else { 
-                    h
-                }
+    pub fn new(require_headset: bool, owning_context: Rc<Context>) -> Result<Session, OculusError> {
+        let invoker = owning_context.invoker();
+
+        if require_headset {
+            let has_headset = unsafe {
+                let result = invoker.ovr_Detect(0);
+                result.IsOculusHMDConnected == ffi::ovrTrue
+            };
+            if !has_headset {
+                return Err(OculusError::NoHeadset)
             }
+        }
+
+        let session = unsafe {
+            let session: ovrSession = mem::uninitialized();
+            let luid: ovrGraphicsLuid = mem::zeroed();
+
+            ovr_invoke!(invoker.ovr_Create(&session, &luid));
+
+            session
         };
-        if hmd.is_null() { 
-            Err(OculusError::SdkError("ovrHmd_Create failed"))
-        } else { 
-            Ok(Hmd{ native_hmd: hmd, context: owning_context })
-        }
-    }
 
-    /// Set HMD caps. Some HMD caps cannot be set using the Oculus SDK; see the Oculus docs for
-    /// more details.
-    pub fn set_caps(&mut self, caps: ffi::ovrHmdCaps) {
-        unsafe {
-            self.context.invoker().ovrHmd_SetEnabledCaps(self.native_hmd, caps);
-        }
-    }
-
-    /// Dismiss the Health and Safety warning automatically displayed by the Oculus runtime. This
-    /// should only be dismissed in response to user input; see the Oculus SDK documentation for
-    /// details on proper usage.
-    pub fn dismiss_hsw(&self) {
-        unsafe {
-            // Ignore the return value; the underlying implementation is already idempotent, and
-            // queues up the dismissal if it isn't ready yet.
-            self.context.invoker().ovrHmd_DismissHSWDisplay(self.native_hmd);
-        }
+        let eye_offsets = unsafe {
+            let desc = invoker.ovr_GetHmdDesc(session);
+            let offset_for_eye = |eye| {
+                let fov = desc.DefaultEyeFov[eye];
+                let desc = invoker.ovr_GetRenderDesc(session, eye, fov);
+                desc.HmdToEyeViewOffset
+            };
+            [offset_for_eye(0), offset_for_eye(1)]
+        };
+        Ok(Session{ session: session, context: owning_context })
     }
 
     pub fn recenter_pose(&self) {
@@ -224,64 +189,175 @@ impl Hmd {
         }
     }
 
-    /// Enable tracking for this HMD with the specified capabilities.
+    /// Reconfigure tracking for this HMD with the specified capabilities.
     pub fn configure_tracking(&mut self, caps: ffi::ovrTrackingCaps) -> Result<(), OculusError> {
         unsafe {
-            ovr_invoke!(self.context.invoker().ovrHmd_ConfigureTracking(self.native_hmd, 
+            ovr_invoke!(self.context.invoker().ovrHmd_ConfigureTracking(self.session, 
                                                                         caps, 
                                                                         ffi::ovrTrackingCaps::empty()));
         }
         Ok(())
     }
 
-    /// Returns true if the HMD is configured to run in Direct mode, or false if it is in Extend
-    /// Desktop mode.
-    pub fn is_direct(&self) -> bool {
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
         unsafe {
-            let h = &*self.native_hmd;
-            !h.HmdCaps.contains(ffi::ovrHmdCap_ExtendDesktop)
+            self.context.invoker().ovr_Destroy(self.session);
         }
     }
+}
 
-    /// Native resolution of the full HMD display.
-    pub fn resolution(&self) -> (u32, u32) {
-        unsafe {
-            let ref native_struct = *self.native_hmd;
-            (native_struct.Resolution.w as u32, native_struct.Resolution.h as u32)
+pub struct Frame {
+    predicted_time: f64,
+    eye_poses: (ffi::ovrPosef, ffi::ovrPosef)
+}
+
+impl Frame {
+    fn new(session: &'a Session, eye_offsets: [ffi::ovrVector3f; 2], frame_index: i64) {
+        let invoker = session.context.invoker();
+        let (time, poses) = unsafe {
+            let time = invoker.ovr_GetPredictedDisplayTime(session.session, frame_index);
+            let tracking_state = invoker.ovr_GetTrackingState(session.session, time, ffi::ovrTrue);
+            let poses: [ovrPosef; 2] = mem::uninitialized();
+            invoker.ovr_CalcEyePoses(tracking_state.HeadPose, eye_offsets, &poses);
+
+            (time, poses)
+        };
+
+        Frame {
+            predicted_time: time,
+            poses: poses
         }
     }
+}
 
-    /// Get the native display identifier for the monitor represented by this HMD.
-    pub fn get_display(&self) -> HmdDisplay {
+struct SwapTextureSet<'a> {
+    texture_set: *mut ffi::ovrSwapTextureSet,
+    session: &'a Session
+}
+
+impl<'a> SwapTextureSet<'a> {
+    pub fn new(session: &'a Session, width: i32, height: i32) -> Result<SwapTextureSet<'a>, OculusError> {
+        let texture_set = unsafe {
+            let texture_set: *mut ffi::ovrSwapTextureSet = mem::uninitialized();
+            ovr_invoke!(session.context.invoker().ovr_CreateSwapTextureSetGL(session.session,
+                                                                             gl::SRGB_ALPHA8,
+                                                                             width,
+                                                                             height,
+                                                                             &texture_set));
+            texture_set
+        };
+        Ok(SwapTextureSet {
+            texture_set: texture_set,
+            session: session
+        })
+    }
+
+    pub fn advance(&mut self) -> u32 {
+        self.texture_set.CurrentIndex =
+            (self.texture_set.CurrentIndex + 1) % self.texture_set.TextureCount;
+    }
+
+    pub fn current(&self) -> u32 {
         unsafe {
-            let ref native_struct = *self.native_hmd;
-            let id = if cfg!(windows) {
-                let s = {
-                    use std::ffi::CStr;
-                    CStr::from_ptr(native_struct.DisplayDeviceName).to_bytes()
-                };
-                HmdDisplayId::Name(String::from_utf8_lossy(s).into_owned())
-            } else if cfg!(target_os = "macos") {
-                HmdDisplayId::Numeric(native_struct.DisplayId as u32)
-            } else {
-                HmdDisplayId::Unavailable
-            };
-            HmdDisplay {
-                id: id,
-                x: native_struct.WindowsPos.x,
-                y: native_struct.WindowsPos.y,
-                width: native_struct.Resolution.w as u32,
-                height: native_struct.Resolution.h as u32
+            let texture = texture_set.Textures.offset(texture_set.CurrentIndex);
+            texture.TexId
+        }
+    }
+}
+
+impl<'a> Drop for SwapTextureSet<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            self.session.context.invoker().ovr_DestroySwapTextureSet(&texture_set);
+        }
+    }
+}
+
+struct EyeRenderDetails {
+    width: i32,
+    height: i32,
+    fov: ffi::ovrFovPort
+}
+
+impl EyeRenderDetails {
+    fn for_eye(session: &Session, eye: i32, pixels_per_display_pixel: f32) -> EyeRenderDetails {
+        let invoker = session.context.invoker();
+        unsafe {
+            let desc = invoker.ovr_GetHmdDesc(session.session);
+            let fov = desc.DefaultEyeFov[eye];
+
+            let size = invoker.ovr_GetFovTextureSize(session.session,
+                                                     eye,
+                                                     fov,
+                                                     pixels_per_display_pixel);
+
+            EyeRenderDetails {
+                width: size.w,
+                height: size.h,
+                fov: fov
             }
         }
     }
 }
 
-impl Drop for Hmd {
-    fn drop(&mut self) {
-        unsafe {
-            self.context.invoker().ovrHmd_Destroy(self.native_hmd);
-        }
+pub struct Layer<'a> {
+    texture_sets: (SwapTextureSet, SwapTextureSet),
+    layer: ffi::ovrLayerEyeFov,
+    session: &'a Session
+}
+
+impl<'a> Layer<'a> {
+    pub fn new(session: &'a Session) -> Result<Layer<'a>, OculusError> {
+        let details = (
+            EyeRenderDetails::for_eye(session, 0, 1f32),
+            EyeRenderDetails::for_eye(session, 1, 1f32)
+        );
+        let texture_sets = (
+            try!(SwapTextureSet::new(session, details.0.width, details.0.height)),
+            try!(SwapTextureSet::new(session, details.1.width, details.1.height))
+        );
+
+        let full_rect = ffi::ovrRecti {
+            Pos: ffi::ovrVector2i { x: 0, y: 0 },
+            Size: ffi::ovrSizei { w: 1, h: 1  }
+        };
+
+        let layer = 
+            ffi::ovrLayerEyeFov {
+                Header: ffi::ovrLayerHeader {
+                    Type: ffi::ovrLayerType_EyeFov,
+                    Flags: ffi::ovrLayerFlags::empty()
+                },
+                ColorTexture: [texture_set.0.texture_set, texture_set.1.texture_set],
+                Viewport: [full_rect, full_rect],
+                Fov: [details.0.fov, details.1.fov],
+                RenderPose: [Default::default(), Default::default()],
+                SensorSampleTime: 0f64
+            };
+
+        Ok(Layer {
+            texture_sets: texture_sets,
+            layer: layer,
+            session: session
+        })
+    }
+
+    // TODO: need to think about advance (atomic, both eyes) vs. render; or, creating a version
+    // that returns both ids (more sane, now that I think about it)
+
+    // REVIEW: Painfully mutable. Could probably ratchet this back a little.
+    pub fn advance_for_frame(&mut self, eye: &Eye, frame: &Frame) -> u32 {
+        // advance the 
+        let mut texture_set = match eye {
+            &Eye::Left => &mut self.texture_sets.0
+            &Eye::Right => &mut self.texture_sets.1
+        };
+        let id = texture_set.advance();
+
+        self.
     }
 }
 

@@ -15,6 +15,7 @@ default = ["glutin"]
 [dependencies]
 bitflags = "0.1.1"
 libc = "0.1.5"
+gl = "0.3.0"
 
 [dependencies.glutin]
 version = "^0.1"
